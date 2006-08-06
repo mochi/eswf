@@ -1,0 +1,5 @@
+eswf is a pure Erlang library for dealing with Adobe SWF files and related
+data formats.
+
+Currently, eswf implements a small subset of Flash 8 SWF tags and ActionScript
+bytecode.
