@@ -10,4 +10,4 @@ release: clean appfile
 	sh support/create_release.sh
 
 appfile:
-	(cd src;$(MAKE) ../ebin/esmb.app)
+	(cd src;$(MAKE) ../ebin/eswf.app)
