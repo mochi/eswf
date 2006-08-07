@@ -22,13 +22,13 @@ encswf(Version, {Width, Height}, Fps, Tags) ->
 				  {eswf_tags:enctag(Tag), Acc}
 			  end,
 			  0, Tags),    
-    Bytes = [EncTags, <<0:16/little>>],
-    Size = iolist_size(Bytes),
-    Signature = <<"FWS", Version, Size:32/little>>,
     Bounds = eswf_tags:enc({rect, 0, Width, 0, Height}),
     ShiftFps = trunc(Fps * 256),
     Header = <<ShiftFps:16/little, Frames:16/little>>,
-    [Signature, Bounds, Header, Bytes].
+    Bytes = [Bounds, Header, EncTags, <<0:16/little>>],
+    Size = 8 + iolist_size(Bytes),
+    Signature = <<"FWS", Version, Size:32/little>>,
+    [Signature, Bytes].
 
 
 %% @spec swf_redir(Url, {Width, Height}) -> iodata()
