@@ -6,17 +6,16 @@
 -module(eswf_bits).
 -export([calc/2, enc/3, enc/4, to_bytes/1]).
 
--import(lists, [max/1, duplicate/2, reverse/1]).
-
 %% @type bit_format() = unsigned | signed | fixed
 
 %% @spec calc(Kind::bit_format(), List) -> integer()
 %% @doc Returns the number of bits required to represent each number of list.
 calc(unsigned, [])   -> 0;
-calc(unsigned, List) -> calc(unsigned, max(List), 0);
+calc(unsigned, List) -> calc(unsigned, lists:max(List), 0);
 calc(signed, List)   -> 1 + calc(unsigned, List);
 calc(fixed, [])      -> 1;
-calc(fixed, List)    -> 1 + calc(unsigned, abs(trunc(max(List) * 65536)), 0).
+calc(fixed, List)    ->
+    1 + calc(unsigned, abs(trunc(lists:max(List) * 65536)), 0).
 
 calc(unsigned, 0, Pos)                 -> Pos;
 calc(unsigned, Num, Pos) when Pos < 32 -> calc(unsigned, Num bsr 1, Pos + 1).
@@ -54,4 +53,4 @@ to_bytes([B7, B6, B5, B4, B3, B2, B1, B0 | T], Acc) ->
 to_bytes([], Acc) ->
     lists:reverse(Acc);
 to_bytes(List, Acc) ->
-    to_bytes(List ++ duplicate(8 - length(List), 0), Acc).
+    to_bytes(List ++ lists:duplicate(8 - length(List), 0), Acc).
