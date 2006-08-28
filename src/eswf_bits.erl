@@ -46,9 +46,7 @@ enc(Kind, Bits, Num) ->
 to_bytes(L) -> to_bytes(L, []).
 
 to_bytes([B7, B6, B5, B4, B3, B2, B1, B0 | T], Acc) ->
-    Byte = (B7 bsl 7) bor (B6 bsl 6) bor
-    (B5 bsl 5) bor (B4 bsl 4) bor (B3 bsl 3) bor
-    (B2 bsl 2) bor (B1 bsl 1) bor B0,
+    <<Byte>> = <<B7:1, B6:1, B5:1, B4:1, B3:1, B2:1, B1:1, B0:1>>,
     to_bytes(T, [Byte | Acc]);
 to_bytes([], Acc) ->
     lists:reverse(Acc);

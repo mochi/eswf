@@ -5,12 +5,54 @@
 
 -module(eswf).
 
--export([encswf/4]).
+-export([encswf/4, decswf/1]).
 -export([swf_redir/2, swf_redir/4]).
 
 %% @type iolist() = [char() | binary() | iolist()]
 %% @type iodata() = iolist() | binary()
 
+%% This is really bad, should be done as some kinda CPS or a FSM maybe.
+decswf(Binary) ->
+    <<C, $W, $S, Version, _FileLength:32/little, B0/binary>> = Binary,
+    B1 = case C of
+	     $F ->
+		 B0;
+	     $C ->
+		 zlib:uncompress(B0)
+	 end,
+    <<RB:5, _:3, _/binary>> = B1,
+    Padding = case (8 - ((5 + RB * 4) band 7)) of
+		  0 ->
+		      0;
+		  P -> P
+	      end,
+    <<RB:5, 0:RB, W0:RB/signed, 0:RB, H0:RB/signed, _:Padding,
+     FR0:16/little, FrameCount:16/little, B2/binary>> = B1,
+    Width = W0 / 20.0,
+    Height = H0 / 20.0,
+    FrameRate = FR0 / 256.0,
+    Tags = read_tags(B2),
+    {Version, {Width, Height}, FrameRate, FrameCount, Tags}.
+
+read_tags(Binary) ->
+    read_tags(Binary, []).
+
+read_tags(<<0:16/little, _/binary>>, Acc) ->
+    %% EndTag
+    lists:reverse(Acc);
+read_tags(<<CodeAndLength:16/little, B0/binary>>, Acc) ->
+    <<Code:10, ShortLength:6>> = <<CodeAndLength:16>>,
+    {Length, BodyRest} = case ShortLength of
+			     63 ->
+				 <<L1:32/little, B1/binary>> = B0,
+				 {L1, B1};
+			     _ ->
+				 {ShortLength, B0}
+			end,
+    <<Body:Length/binary, Rest/binary>> = BodyRest,
+    read_tags(Rest, [{Code, Body} | Acc]).
+				
+				
 %% @spec encswf(Version, {Width, Height}, Fps, Tags) -> iodata()
 %% @doc Return an uncompressed SWF file containing the tags in Tags.
 encswf(Version, {Width, Height}, Fps, Tags) ->
