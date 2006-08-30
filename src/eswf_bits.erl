@@ -5,6 +5,7 @@
 
 -module(eswf_bits).
 -export([calc/2, enc/3, enc/4, to_bytes/1]).
+-export([test/0]).
 
 %% @type bit_format() = unsigned | signed | fixed
 
@@ -52,3 +53,38 @@ to_bytes([], Acc) ->
     lists:reverse(Acc);
 to_bytes(List, Acc) ->
     to_bytes(List ++ lists:duplicate(8 - length(List), 0), Acc).
+
+%% @spec test() -> ok
+%% @doc Run the tests.
+
+test() ->
+    ok = test(to_bytes),
+    ok = test(enc),
+    ok.
+
+test(to_bytes) ->
+    [] = to_bytes([]),
+    [128] = to_bytes([1]),
+    [254] = to_bytes([1,1,1,1,1,1,1]),
+    [255] = to_bytes([1,1,1,1,1,1,1,1]),
+    [255, 1] = to_bytes([1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,1]),
+    ok;
+test(enc) ->
+    [1,1,1,1,1,1,1,0] = enc(unsigned, 8, 254),
+    [1,1,1,1,1,1,1,0] = enc(signed, 8, -2),
+    [0,0,1,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0] = enc(fixed, 22, 10.5),
+    [0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0] = enc(fixed, 22, 30.0),
+    [1,0,1,0,1,1,1,0,0,1] = enc(fixed, 10, -0.005),
+    ok;
+test(calc) ->
+    8 = calc(unsigned, [254]),
+    4 = calc(unsigned, [12]),
+    2 = calc(signed, [-1]),
+    12 = calc(signed, [-1200]),
+    21 = calc(fixed, [10.5]),
+    22 = calc(fixed, [30]),
+    22 = calc(fixed, [10.5, 30]),
+    22 = calc(fixed, [30, 10.5]),
+    10 = calc(fixed, [-0.005]),
+    ok.
+    

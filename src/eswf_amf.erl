@@ -1,6 +1,6 @@
 -module(eswf_amf).
--export([from_amf/1, from_amf/2]).
--export([from_amf_utf8/2, from_amf_dict/2, from_amf_array/3]).
+-export([from_amf/1, from_amf/3]).
+-export([from_amf_utf8/2, from_amf_dict/4, from_amf_array/4]).
 -export([to_amf/1]).
 -export([to_amf_dict/2, to_amf_array/3]).
 
@@ -21,86 +21,95 @@
 -define(RECORDSET, 14).
 -define(XML, 15).
 -define(TYPEDOBJECT, 16).
+-define(AMF3DATA, 17).
+
+-record(amf, {objects=nil, objectcount=0}).
+
+get_ref({ref, RefNum}, S) ->
+    gb_trees:get(RefNum, S#amf.objects).
+
+alloc_refnum(S) ->
+    RefNum = S#amf.objectcount,
+    {RefNum, S#amf{objectcount=1 + RefNum}}.
+
+make_ref(RefNum, Object, S) ->
+    Tree = gb_trees:insert(RefNum, Object, S#amf.objects),
+    {{ref, RefNum}, S#amf{objects=Tree}}.
 
 from_amf(Data) ->
     <<Code, Rest/binary>> = iolist_to_binary(Data),
-    from_amf(Code, Rest).
+    from_amf(Code, Rest, #amf{objects=gb_trees:empty()}).
 
-from_amf(Code, Data) when Code == ?DOUBLE ->
-    <<Float:64/float, Rest/binary>> = Data,
-    {Float, Rest};
-from_amf(Code, Data) when Code == ?BOOL ->
-    <<Char, Rest/binary>> = Data,
-    V = case Char of
-	    0 ->
-		false;
-	    _ ->
-		true
-	end,
-    {V, Rest};
-from_amf(Code, Data) when Code == ?UTF8 ->
-    from_amf_utf8(Data, 16);
-from_amf(Code, Data) when Code == ?OBJECT ->
-    {Dict, Rest} = from_amf_dict(Data, []),
-    {{object, Dict}, Rest};
-%% from_amf(Code, Data) when Code == ?MOVIECLIP ->
-%%    {no_idea, Rest};
-from_amf(Code, Data) when Code == ?NULL ->
-    {null, Data};
-from_amf(Code, Data) when Code == ?UNDEFINED ->
-    {undefined, Data};
-from_amf(Code, Data) when Code == ?UNSUPPORTED ->
-    {unsupported, Data};
-from_amf(Code, Data) when Code == ?REFERENCE ->
-    <<Ref:16, Rest/binary>> = Data,
-    {{reference, Ref}, Rest};
-from_amf(Code, Data) when Code == ?MIXEDARRAY ->
-    <<Size:32, Rest/binary>> = Data,
-    {Dict, Rest} = from_amf_dict(Data, []),
-    {{mixed, Size, Dict}, Rest};
-from_amf(Code, Data) when Code == ?ENDOFOBJECT ->
-    {stop, Data};
-from_amf(Code, Data) when Code == ?ARRAY ->
-    <<Size:32, Rest/binary>> = Data,
-    {Array, Rest} = from_amf_array(Size, Data, []),
-    {{array, Size, Array}, Rest};
-from_amf(Code, Data) when Code == ?DATE ->
-    <<Timestamp:64/float, Timezone:16/signed, Rest/binary>> = Data,
-    {{date, Timestamp, Timezone}, Rest};
-from_amf(Code, Data) when Code == ?LONGUTF8 ->
-    from_amf_utf8(Data, 32);
-%% from_amf(Code, Data) when Code == ?RECORDSET ->
-%%    {no_idea, Rest};
-from_amf(Code, Data) when Code == ?XML ->
+from_amf(Code, <<Float:64/float, Data/binary>>, S) when Code == ?DOUBLE ->
+    {Float, Data, S};
+from_amf(Code, <<0, Data/binary>>, S) when Code == ?BOOL ->
+    {false, Data, S};
+from_amf(Code, <<_, Data/binary>>, S) when Code == ?BOOL ->
+    {true, Data, S};
+from_amf(Code, Data, S) when Code == ?UTF8 ->
+    {String, Rest} = from_amf_utf8(Data, 16),
+    {String, Rest, S};
+from_amf(Code, Data, S) when Code == ?OBJECT ->
+    from_amf_dict({object}, Data, S);
+from_amf(Code, Data, S) when Code == ?NULL ->
+    {null, Data, S};
+from_amf(Code, Data, S) when Code == ?UNDEFINED ->
+    {undefined, Data, S};
+from_amf(Code, Data, S) when Code == ?UNSUPPORTED ->
+    {unsupported, Data, S};
+from_amf(Code, <<RefNum:16, Data/binary>>, S) when Code == ?REFERENCE ->
+    {{ref, RefNum}, Data, S};
+from_amf(Code, <<Size:32, Data/binary>>, S) when Code == ?MIXEDARRAY ->
+    from_amf_dict({mixed, Size}, Data, S);
+from_amf(Code, Data, S) when Code == ?ENDOFOBJECT ->
+    {stop, Data, S};
+from_amf(Code, <<Size:32, Data/binary>>, S) when Code == ?ARRAY ->
+    from_amf_array({array}, Size, Data, S);
+from_amf(Code, Data, S) when Code == ?DATE ->
+    <<TS:64/float, TZ:16/signed, Rest/binary>> = Data,
+    {{date, TS, TZ}, Rest, S};
+from_amf(Code, Data, S) when Code == ?LONGUTF8 ->
     {String, Rest} = from_amf_utf8(Data, 32),
-    {{xml, String}, Rest};
-from_amf(Code, Data) when Code == ?TYPEDOBJECT ->
+    {String, Rest, S};
+from_amf(Code, Data, S) when Code == ?XML ->
+    {String, Rest} = from_amf_utf8(Data, 32),
+    {{xml, String}, Rest, S};
+from_amf(Code, Data, S) when Code == ?TYPEDOBJECT ->
     {Type, DictAndRest} = from_amf_utf8(Data, 16),
-    {Dict, Rest} = from_amf_dict(DictAndRest, []),
-    {{typed, Type, Dict}, Rest}.
+    from_amf_dict({typed, Type}, DictAndRest, S).
+%% from_amf(Code, Data) when Code == ?AMF3DATA ->
+%%    {Chunk, Rest} = eswf_amf3:from_amf3(Data),
+%%    {{amf3, Chunk}, Rest}.
 
 
-from_amf_array(0, Data, Acc) ->
-    {lists:reverse(Acc), Data};
-from_amf_array(Size, Data, Acc) ->
-    {Obj, Rest} = from_amf(Data),
-    from_amf_array(Size - 1, Rest, [Obj | Acc]).
+from_amf_array(Tag, Size, Data, S) ->
+    from_amf_array(Tag, Size, Data, S, []).
+
+from_amf_array(Tag, 0, Data, S, Acc) ->
+    Array = erlang:append_element(Tag, lists:reverse(Acc)),
+    {Array, Data, S};
+from_amf_array(Tag, Size, <<Code, Data/binary>>, S, Acc) ->
+    {Item, Rest, S1} = from_amf(Code, Data, S),
+    from_amf_array(Tag, Size - 1, Rest, S1, [Item | Acc]).
 
 from_amf_utf8(Data, Bits) ->
     <<Length:Bits, StringAndRest/binary>> = Data,
     <<String:Length/binary, Rest/binary>> = StringAndRest,
     {String, Rest}.
     
-from_amf_dict(Data, Acc) ->
-    {Key, ValueAndRest} = from_amf_utf8(Data, 16),
-    {Value, Rest} = from_amf(ValueAndRest),
+from_amf_dict(Tag, Data, S) ->
+    from_amf_dict(Tag, Data, S, []).
+
+from_amf_dict(Tag, Data, S, Acc) ->
+    {Key, <<Code, ValueAndRest/binary>>} = from_amf_utf8(Data, 16),
+    {Value, Rest, S1} = from_amf(Code, ValueAndRest, S),
     case {Key, Value} of 
 	{<<>>, stop} ->
-	    {lists:reverse(Acc), Rest};
+	    Dict = erlang:append_element(Tag, lists:reverse(Acc)),
+	    {Dict, Rest, S1};
 	Pair ->
-	    from_amf_dict(Rest, [Pair | Acc])
-    end. 
-
+	    from_amf_dict(Tag, Rest, S1, [Pair | Acc])
+    end.
 
 to_amf(Float) when is_float(Float) ->
     <<?DOUBLE, Float:64/float>>;
@@ -141,7 +150,9 @@ to_amf({xml, String}) ->
     [<<?XML, Size:32>>, String];
 to_amf({typed, Name, Dict}) ->
     Size = size(Name),
-    [<<?TYPEDOBJECT, Size:16>>, Name | to_amf_dict(Dict, [])].
+    [<<?TYPEDOBJECT, Size:16>>, Name | to_amf_dict(Dict, [])];
+to_amf({amf3, Chunk}) ->
+    [<<?AMF3DATA>>, eswf_amf3:to_amf3(Chunk)].
 
 to_amf_dict([], Acc) ->
     lists:reverse([<<0:16, ?ENDOFOBJECT>> | Acc]);

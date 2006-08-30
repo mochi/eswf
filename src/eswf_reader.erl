@@ -1,7 +1,26 @@
+%% @author Bob Ippolito <bob@redivi.com>
+%% @copyright 2006 Bob Ippolito
+
+%% @doc Streaming CPS-style reading functions for files and binaries with a 
+%%      zlib wrapper.
+
+%% @type iolist() = [char() | binary() | iolist()]
+%% @type iodata() = iolist() | binary()
+%% @type readable() = string() | binary()
+%%                    | {file, File}
+%%                    | {inflate, readable()}
+
 -module(eswf_reader).
 
--export([reader/1]).
+-export([reader/1, test/0]).
 
+%% @spec reader(readable()) -> Reader
+%% @doc Return a function Reader0/1 such that Reader0(N) returns:
+%%          {Reader1, <<NBytes>>} |
+%%          {Reader1, <<LessThanNBytes>>} |
+%%          {Reader1, eof}.
+%%      Reader0(close) may be called to ensure that any state associated with
+%%      the reader is closed premature to stream end.
 reader(<<>>) -> 
     fun (_) ->
 	    {reader(<<>>), eof}
@@ -72,3 +91,29 @@ chunk_bytes([First | Rest], BytesTotal, BytesLeft, Acc) ->
 	true ->
 	    chunk_bytes(Rest, BytesTotal, BytesLeft - FirstSize, [First | Acc])
     end.
+
+%% @spec test() -> ok
+%% @doc Run tests for eswf_reader.
+test() ->
+    ok = test(reader_binary),
+    ok = test(inflate_binary),
+    ok.
+
+test(reader_binary) ->
+    R0 = reader(<<"foobarbaz">>),
+    {R1, <<"foo">>} = R0(3),
+    {R2, <<"barb">>} = R1(4),
+    {R3, <<"az">>} = R2(10),
+    {R4, eof} = R3(1),
+    {_, eof} = R4(100),
+    ok;
+test(inflate_binary) ->
+    R0 = reader(iolist_to_binary([<<"test">>, zlib:compress(<<"foobarbaz">>)])),
+    {R1, <<"test">>} = R0(4),
+    R2 = reader({inflate, R1}),
+    {R3, <<"foo">>} = R2(3),
+    {R4, <<"barb">>} = R3(4),
+    {R5, <<"az">>} = R4(10),
+    {R6, eof} = R5(1),
+    {_, eof} = R6(100),
+    ok.
