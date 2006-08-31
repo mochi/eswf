@@ -16,9 +16,12 @@
 
 %% @spec reader(readable()) -> Reader
 %% @doc Return a function Reader0/1 such that Reader0(N) returns:
-%%          {Reader1, <<NBytes>>} |
-%%          {Reader1, <<LessThanNBytes>>} |
+%%          {Reader1, binary()} |
 %%          {Reader1, eof}.
+%%
+%%      Like other file reading APIs, the length of the returned binary will
+%%      be equal to the number of bytes asked for unless eof is reached.
+%%
 %%      Reader0(close) may be called to ensure that any state associated with
 %%      the reader is closed premature to stream end.
 reader(<<>>) -> 

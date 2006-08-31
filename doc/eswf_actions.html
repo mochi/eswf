@@ -1,0 +1,41 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+<title>Module eswf_actions</title>
+<link rel="stylesheet" type="text/css" href="stylesheet.css">
+</head>
+<body bgcolor="white">
+
+<h1>Module eswf_actions</h1>
+SWF Actions (AS1 VM).
+<p>Copyright © 2006 Bob Ippolito</p>
+<ul><li><a href="#description">Description</a></li><li><a href="#types">Data Types</a></li><li><a href="#index">Function Index</a></li><li><a href="#functions">Function Details</a></li></ul>
+<p><b>Authors:</b> Bob Ippolito (<a href="mailto:bob@redivi.com"><tt>bob@redivi.com</tt></a>).</p>
+
+<h2><a name="description">Description</a></h2>SWF Actions (AS1 VM).
+<h2><a name="types">Data Types</a></h2>
+
+<h3><a name="type-iodata">iodata()</a></h3>
+<p><tt>iodata() = <a href="#type-iolist">iolist()</a> | binary()</tt></p>
+
+
+<h3><a name="type-iolist">iolist()</a></h3>
+<p><tt>iolist() = [char() | binary() | <a href="#type-iolist">iolist()</a>]</tt></p>
+
+
+<h2><a name="index">Function Index</a></h2>
+<table width="100%" border="1"><tr><td valign="top"><a href="#encaction-1">encaction/1</a></td><td>Convert a high-level SWF action to iodata().</td></tr>
+<tr><td valign="top"><a href="#encactions-1">encactions/1</a></td><td>Convert a list of high-level SWF actions to iodata().</td></tr>
+</table>
+
+<h2><a name="functions">Function Details</a></h2>
+
+<h3><a name="encaction-1">encaction/1</a></h3>
+<p><tt>encaction(X1::Any) -&gt; <a href="#type-iodata">iodata()</a></tt></p>
+<p>Convert a high-level SWF action to iodata().</p>
+
+<h3><a name="encactions-1">encactions/1</a></h3>
+<p><tt>encactions(Actions::List) -&gt; <a href="#type-iodata">iodata()</a></tt></p>
+<p>Convert a list of high-level SWF actions to iodata().</p>
+</body>
+</html>

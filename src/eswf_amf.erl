@@ -4,6 +4,8 @@
 -export([to_amf/1]).
 -export([to_amf_dict/2, to_amf_array/3]).
 
+-export([test/0]).
+
 -define(DOUBLE, 0).
 -define(BOOL, 1).
 -define(UTF8, 2).
@@ -163,3 +165,7 @@ to_amf_array(0, [], Acc) ->
     lists:reverse(Acc);
 to_amf_array(Size, [Obj | Rest], Acc) ->
     to_amf_array(Size - 1, Rest, [to_amf(Obj) | Acc]). 
+
+
+test() ->
+    ok.

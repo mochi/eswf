@@ -1,0 +1,55 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+<title>Module eswf_tags</title>
+<link rel="stylesheet" type="text/css" href="stylesheet.css">
+</head>
+<body bgcolor="white">
+
+<h1>Module eswf_tags</h1>
+Create SWF tags.
+<p>Copyright © 2006 Bob Ippolito</p>
+<ul><li><a href="#description">Description</a></li><li><a href="#types">Data Types</a></li><li><a href="#index">Function Index</a></li><li><a href="#functions">Function Details</a></li></ul>
+<p><b>Authors:</b> Bob Ippolito (<a href="mailto:bob@redivi.com"><tt>bob@redivi.com</tt></a>).</p>
+
+<h2><a name="description">Description</a></h2>Create SWF tags.
+<h2><a name="types">Data Types</a></h2>
+
+<h3><a name="type-bitlist">bitlist()</a></h3>
+<p><tt>bitlist() = [char()]</tt></p>
+<p>Where all items are 0 or 1.</p>
+
+<h3><a name="type-iodata">iodata()</a></h3>
+<p><tt>iodata() = <a href="#type-iolist">iolist()</a> | binary()</tt></p>
+
+
+<h3><a name="type-iolist">iolist()</a></h3>
+<p><tt>iolist() = [char() | binary() | <a href="#type-iolist">iolist()</a>]</tt></p>
+
+
+<h2><a name="index">Function Index</a></h2>
+<table width="100%" border="1"><tr><td valign="top"><a href="#enc-1">enc/1</a></td><td>Convert a high-level SWF data type to iodata().</td></tr>
+<tr><td valign="top"><a href="#encbits-1">encbits/1</a></td><td/></tr>
+<tr><td valign="top"><a href="#enctag-1">enctag/1</a></td><td>Convert a high-level SWF tag to iodata().</td></tr>
+<tr><td valign="top"><a href="#enctag-2">enctag/2</a></td><td>Convert a raw SWF tag to iodata().</td></tr>
+</table>
+
+<h2><a name="functions">Function Details</a></h2>
+
+<h3><a name="enc-1">enc/1</a></h3>
+<p><tt>enc(X1::Any) -&gt; <a href="#type-iodata">iodata()</a></tt></p>
+<p>Convert a high-level SWF data type to iodata().</p>
+
+<h3><a name="encbits-1">encbits/1</a></h3>
+<tt>encbits(Any) -&gt; term()
+</tt>
+
+<h3><a name="enctag-1">enctag/1</a></h3>
+<p><tt>enctag(X1::Any) -&gt; <a href="#type-iolist">iolist()</a></tt></p>
+<p>Convert a high-level SWF tag to iodata().</p>
+
+<h3><a name="enctag-2">enctag/2</a></h3>
+<p><tt>enctag(Code::char(), Body::<a href="#type-iodata">iodata()</a>) -&gt; <a href="#type-iolist">iolist()</a></tt></p>
+<p>Convert a raw SWF tag to iodata().</p>
+</body>
+</html>

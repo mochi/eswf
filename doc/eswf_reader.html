@@ -1,0 +1,57 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+<title>Module eswf_reader</title>
+<link rel="stylesheet" type="text/css" href="stylesheet.css">
+</head>
+<body bgcolor="white">
+
+<h1>Module eswf_reader</h1>
+Streaming CPS-style reading functions for files and binaries with a
+       zlib wrapper.
+<p>Copyright © 2006 Bob Ippolito</p>
+<ul><li><a href="#description">Description</a></li><li><a href="#types">Data Types</a></li><li><a href="#index">Function Index</a></li><li><a href="#functions">Function Details</a></li></ul>
+<p><b>Authors:</b> Bob Ippolito (<a href="mailto:bob@redivi.com"><tt>bob@redivi.com</tt></a>).</p>
+
+<h2><a name="description">Description</a></h2>Streaming CPS-style reading functions for files and binaries with a
+       zlib wrapper.
+<h2><a name="types">Data Types</a></h2>
+
+<h3><a name="type-iodata">iodata()</a></h3>
+<p><tt>iodata() = <a href="#type-iolist">iolist()</a> | binary()</tt></p>
+
+
+<h3><a name="type-iolist">iolist()</a></h3>
+<p><tt>iolist() = [char() | binary() | <a href="#type-iolist">iolist()</a>]</tt></p>
+
+
+<h3><a name="type-readable">readable()</a></h3>
+<p><tt>readable() = string() | binary() | {file, File} | {inflate, <a href="#type-readable">readable()</a>}</tt></p>
+
+
+<h2><a name="index">Function Index</a></h2>
+<table width="100%" border="1"><tr><td valign="top"><a href="#reader-1">reader/1</a></td><td>Return a function Reader0/1 such that Reader0(N) returns:           
+{Reader1, binary()} |           
+{Reader1, eof}.</td></tr>
+<tr><td valign="top"><a href="#test-0">test/0</a></td><td>Run tests for eswf_reader.</td></tr>
+</table>
+
+<h2><a name="functions">Function Details</a></h2>
+
+<h3><a name="reader-1">reader/1</a></h3>
+<p><tt>reader(Path::<a href="#type-readable">readable()</a>) -&gt; Reader</tt></p>
+<p><p>Return a function Reader0/1 such that Reader0(N) returns:           
+{Reader1, binary()} |           
+{Reader1, eof}.</p>
+ 
+       <p>Like other file reading APIs, the length of the returned binary will       
+be equal to the number of bytes asked for unless eof is reached.</p>
+ 
+       Reader0(close) may be called to ensure that any state associated with
+       the reader is closed premature to stream end.</p>
+
+<h3><a name="test-0">test/0</a></h3>
+<p><tt>test() -&gt; ok</tt></p>
+<p>Run tests for eswf_reader.</p>
+</body>
+</html>

@@ -1,0 +1,54 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+<title>Module eswf_bits</title>
+<link rel="stylesheet" type="text/css" href="stylesheet.css">
+</head>
+<body bgcolor="white">
+
+<h1>Module eswf_bits</h1>
+Bit twiddling functions.
+<p>Copyright © 2006 Bob Ippolito</p>
+<ul><li><a href="#description">Description</a></li><li><a href="#types">Data Types</a></li><li><a href="#index">Function Index</a></li><li><a href="#functions">Function Details</a></li></ul>
+<p><b>Authors:</b> Bob Ippolito (<a href="mailto:bob@redivi.com"><tt>bob@redivi.com</tt></a>).</p>
+
+<h2><a name="description">Description</a></h2>Bit twiddling functions.
+<h2><a name="types">Data Types</a></h2>
+
+<h3><a name="type-bit_format">bit_format()</a></h3>
+<p><tt>bit_format() = unsigned | signed | fixed</tt></p>
+
+
+<h2><a name="index">Function Index</a></h2>
+<table width="100%" border="1"><tr><td valign="top"><a href="#calc-2">calc/2</a></td><td>Returns the number of bits required to represent each number of list.</td></tr>
+<tr><td valign="top"><a href="#enc-3">enc/3</a></td><td>Equivalent to <a href="#env-4"><tt>env(Kind, Bits, Num, [])</tt></a>.
+</td></tr>
+<tr><td valign="top"><a href="#enc-4">enc/4</a></td><td>Returns Num converted to Kind as a Bits-long list, prepended to Acc.</td></tr>
+<tr><td valign="top"><a href="#test-0">test/0</a></td><td>Run the tests.</td></tr>
+<tr><td valign="top"><a href="#to_bytes-1">to_bytes/1</a></td><td>Returns a list of bytes from the list of bits L.</td></tr>
+</table>
+
+<h2><a name="functions">Function Details</a></h2>
+
+<h3><a name="calc-2">calc/2</a></h3>
+<p><tt>calc(Kind::<a href="#type-bit_format">bit_format()</a>, List) -&gt; integer()</tt></p>
+<p>Returns the number of bits required to represent each number of list.</p>
+
+<h3><a name="enc-3">enc/3</a></h3>
+<p><tt>enc(Kind::<a href="#type-bit_format">bit_format()</a>, Bits, Num) -&gt; list()</tt></p>
+<p>Equivalent to <a href="#env-4"><tt>env(Kind, Bits, Num, [])</tt></a>.</p>
+
+
+<h3><a name="enc-4">enc/4</a></h3>
+<p><tt>enc(Kind::<a href="#type-bit_format">bit_format()</a>, Bits, Num, Acc) -&gt; list()</tt></p>
+<p>Returns Num converted to Kind as a Bits-long list, prepended to Acc.</p>
+
+<h3><a name="test-0">test/0</a></h3>
+<p><tt>test() -&gt; ok</tt></p>
+<p>Run the tests.</p>
+
+<h3><a name="to_bytes-1">to_bytes/1</a></h3>
+<p><tt>to_bytes(L) -&gt; list()</tt></p>
+<p>Returns a list of bytes from the list of bits L.</p>
+</body>
+</html>

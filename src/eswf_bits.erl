@@ -25,15 +25,19 @@ calc(unsigned, Num, Pos) when Pos < 32 -> calc(unsigned, Num bsr 1, Pos + 1).
 %% @doc Returns Num converted to Kind as a Bits-long list, prepended to Acc.
 enc(_, 0, _, Acc) ->
     Acc;
-enc(unsigned, 1, Num, Acc) ->
-    [Num band 1 | Acc];
+enc(unsigned, Bits, Num, Acc) when Bits >= 8 ->
+    % Unlikely to be worth implementing a 16-bit or 32-bit optimization.
+    NextBits = Bits - 8,
+    NextNum = Num bsr 8,
+    Byte = Num band 255,
+    <<B7:1, B6:1, B5:1, B4:1, B3:1, B2:1, B1:1, B0:1>> = <<Byte>>,
+    enc(unsigned, NextBits, NextNum, [B7, B6, B5, B4, B3, B2, B1, B0 | Acc]);
 enc(unsigned, Bits, Num, Acc) ->
     NextBits = Bits - 1,
     [1 band (Num bsr NextBits) | enc(unsigned, NextBits, Num, Acc)];
-enc(signed, Bits, Num, Acc) when Num < 0 ->
-    [1 | enc(unsigned, Bits - 1, Num, Acc)];
 enc(signed, Bits, Num, Acc) ->
-    [0 | enc(unsigned, Bits - 1, Num, Acc)];
+    % bsr preserves sign so we're good here for signed as well.
+    enc(unsigned, Bits, Num, Acc);
 enc(fixed, Bits, Num, Acc) ->
     enc(signed, Bits, trunc(Num * 65536), Acc).
 
@@ -44,15 +48,18 @@ enc(Kind, Bits, Num) ->
 
 %% @spec to_bytes(L) -> list()
 %% @doc Returns a list of bytes from the list of bits L.
-to_bytes(L) -> to_bytes(L, []).
+to_bytes(L) ->
+    to_bytes(L, []).
 
+to_bytes([], Acc) ->
+    lists:reverse(Acc);
 to_bytes([B7, B6, B5, B4, B3, B2, B1, B0 | T], Acc) ->
     <<Byte>> = <<B7:1, B6:1, B5:1, B4:1, B3:1, B2:1, B1:1, B0:1>>,
     to_bytes(T, [Byte | Acc]);
-to_bytes([], Acc) ->
-    lists:reverse(Acc);
 to_bytes(List, Acc) ->
-    to_bytes(List ++ lists:duplicate(8 - length(List), 0), Acc).
+    % Right-pad the list with zeros so that the byte-wide clause matches.
+    Zeros = lists:duplicate(8 - length(List), 0),
+    to_bytes(List ++ Zeros, Acc).
 
 %% @spec test() -> ok
 %% @doc Run the tests.
@@ -71,7 +78,9 @@ test(to_bytes) ->
     ok;
 test(enc) ->
     [1,1,1,1,1,1,1,0] = enc(unsigned, 8, 254),
+    [0,1,1,1,1,1,1,1,0] = enc(unsigned, 9, 254),
     [1,1,1,1,1,1,1,0] = enc(signed, 8, -2),
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0] = enc(signed, 16, -2),
     [0,0,1,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0] = enc(fixed, 22, 10.5),
     [0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0] = enc(fixed, 22, 30.0),
     [1,0,1,0,1,1,1,0,0,1] = enc(fixed, 10, -0.005),
