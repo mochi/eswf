@@ -5,53 +5,69 @@
 
 -module(eswf).
 
--export([encswf/4, decswf/1]).
+-export([encswf/4, decswf/1, swf_reader/1]).
 -export([swf_redir/2, swf_redir/4]).
 
 %% @type iolist() = [char() | binary() | iolist()]
 %% @type iodata() = iolist() | binary()
 
-%% This is really bad, should be done as some kinda CPS or a FSM maybe.
 decswf(Binary) ->
-    <<C, $W, $S, Version, _FileLength:32/little, B0/binary>> = Binary,
-    B1 = case C of
+    {Version, Size, FrameRate, FrameCount, NextTag} = swf_reader(Binary),
+    {Version, Size, FrameRate, FrameCount, all_tags(NextTag(next), [])}.
+
+swf_reader(Reader) when is_function(Reader) ->
+    {R0, Signature} = Reader(8),
+    <<C, $W, $S, Version, _Length:32/little>> = Signature,
+    R1 = case C of
 	     $F ->
-		 B0;
+		 R0;
 	     $C ->
-		 zlib:uncompress(B0)
+		 swf_reader:reader({inflate, R0})
 	 end,
-    <<RB:5, _:3, _/binary>> = B1,
+    {R2, P0} = R1(1),
+    <<RB:5, _:3>> = P0,
     Padding = case (8 - ((5 + RB * 4) band 7)) of
 		  0 ->
 		      0;
 		  P -> P
 	      end,
+    {R3, B0} = R2((((RB * 4) + Padding - 3) div 8) + 4),
+    B1 = iolist_to_binary([P0, B0]),
     <<RB:5, 0:RB, W0:RB/signed, 0:RB, H0:RB/signed, _:Padding,
-     FR0:16/little, FrameCount:16/little, B2/binary>> = B1,
+     FR0:16/little, FrameCount:16/little>> = B1,
     Width = W0 / 20.0,
     Height = H0 / 20.0,
     FrameRate = FR0 / 256.0,
-    Tags = read_tags(B2),
-    {Version, {Width, Height}, FrameRate, FrameCount, Tags}.
+    {Version, {Width, Height}, FrameRate, FrameCount, next_tag(R3)};
+swf_reader(Other) ->
+    swf_reader(eswf_reader:reader(Other)).
+    
+next_tag(Reader) ->
+    fun (close) ->
+	    {RLast, eof} = Reader(close),
+	    {next_tag(RLast), eof};
+	(next) ->
+	    {R0, <<CodeAndLength:16/little>>} = Reader(2),
+	    case <<CodeAndLength:16>> of
+		<<0:16/little>> ->
+		    NT = next_tag(R0),
+		    NT(close);
+		<<Code:10, ShortLength:6>> ->
+		    {R3, Body} = case ShortLength of
+				     63 ->
+					 {R1, <<L1:32/little>>} = R0(4),
+					 R1(L1);
+				     _ ->
+					 R0(ShortLength)
+				 end,
+		    {next_tag(R3), {Code, Body}}
+	    end
+    end.
 
-read_tags(Binary) ->
-    read_tags(Binary, []).
-
-read_tags(<<0:16/little, _/binary>>, Acc) ->
-    %% EndTag
+all_tags({_, eof}, Acc) ->
     lists:reverse(Acc);
-read_tags(<<CodeAndLength:16/little, B0/binary>>, Acc) ->
-    <<Code:10, ShortLength:6>> = <<CodeAndLength:16>>,
-    {Length, BodyRest} = case ShortLength of
-			     63 ->
-				 <<L1:32/little, B1/binary>> = B0,
-				 {L1, B1};
-			     _ ->
-				 {ShortLength, B0}
-			end,
-    <<Body:Length/binary, Rest/binary>> = BodyRest,
-    read_tags(Rest, [{Code, Body} | Acc]).
-				
+all_tags({NextTag, Tag}, Acc) ->
+    all_tags(NextTag(next), [Tag | Acc]).				
 				
 %% @spec encswf(Version, {Width, Height}, Fps, Tags) -> iodata()
 %% @doc Return an uncompressed SWF file containing the tags in Tags.
