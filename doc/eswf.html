@@ -26,6 +26,7 @@ Create SWF files.
 <h2><a name="index">Function Index</a></h2>
 <table width="100%" border="1"><tr><td valign="top"><a href="#decswf-1">decswf/1</a></td><td/></tr>
 <tr><td valign="top"><a href="#encswf-4">encswf/4</a></td><td>Return an uncompressed SWF file containing the tags in Tags.</td></tr>
+<tr><td valign="top"><a href="#swf_reader-1">swf_reader/1</a></td><td/></tr>
 <tr><td valign="top"><a href="#swf_redir-2">swf_redir/2</a></td><td>Equivalent to <a href="#swf_redir-4"><tt>swf_redir(Url, {Width, Height}, 12, 6)</tt></a>.
 </td></tr>
 <tr><td valign="top"><a href="#swf_redir-4">swf_redir/4</a></td><td>Return a SWF that does a loadMovie to Url with a registration point
@@ -41,6 +42,10 @@ Create SWF files.
 <h3><a name="encswf-4">encswf/4</a></h3>
 <p><tt>encswf(Version, X2::{Width, Height}, Fps, Tags) -&gt; <a href="#type-iodata">iodata()</a></tt></p>
 <p>Return an uncompressed SWF file containing the tags in Tags.</p>
+
+<h3><a name="swf_reader-1">swf_reader/1</a></h3>
+<tt>swf_reader(Reader) -&gt; term()
+</tt>
 
 <h3><a name="swf_redir-2">swf_redir/2</a></h3>
 <p><tt>swf_redir(Url, Dimensions::{Width, Height}) -&gt; <a href="#type-iodata">iodata()</a></tt></p>
