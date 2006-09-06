@@ -13,6 +13,7 @@
 -define(ACTION_GET_VARIABLE, 16#1C).
 -define(ACTION_CALL_METHOD, 16#52).
 -define(ACTION_PUSH_DUPLICATE, 16#4C).
+-define(ACTION_GET_MEMBER, 16#4E).
 -define(ACTION_SET_MEMBER, 16#4F).
 -define(ACTION_POP, 16#17).
 
@@ -64,6 +65,8 @@ encaction(call_method) ->
     <<?ACTION_CALL_METHOD>>;
 encaction(push_duplicate) ->
     <<?ACTION_PUSH_DUPLICATE>>;
+encaction(get_member) ->
+    <<?ACTION_GET_MEMBER>>;
 encaction(set_member) ->
     <<?ACTION_SET_MEMBER>>;
 encaction(pop) ->

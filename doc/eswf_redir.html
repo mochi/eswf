@@ -24,7 +24,7 @@ Create URL redirect SWF files.
 
 
 <h2><a name="index">Function Index</a></h2>
-<table width="100%" border="1"><tr><td valign="top"><a href="#action-2">action/2</a></td><td>Return a do_action tag that does a loadMovie to Url with a
+<table width="100%" border="1"><tr><td valign="top"><a href="#actions-2">actions/2</a></td><td>Return actions for a do_action tag that does a loadMovie to Url with a
        registration point at the center.</td></tr>
 <tr><td valign="top"><a href="#swf-2">swf/2</a></td><td>Equivalent to <a href="#swf-4"><tt>swf(Url, {Width, Height}, 12, 6)</tt></a>.
 </td></tr>
@@ -34,9 +34,9 @@ Create URL redirect SWF files.
 
 <h2><a name="functions">Function Details</a></h2>
 
-<h3><a name="action-2">action/2</a></h3>
-<p><tt>action(Url, X2::{Width, Height}) -&gt; {do_action, Actions}</tt></p>
-<p>Return a do_action tag that does a loadMovie to Url with a
+<h3><a name="actions-2">actions/2</a></h3>
+<p><tt>actions(Url, X2::{Width, Height}) -&gt; [Action]</tt></p>
+<p>Return actions for a do_action tag that does a loadMovie to Url with a
        registration point at the center. The center of the loaded movie clip
        will be at (0, 0).</p>
 

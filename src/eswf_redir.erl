@@ -5,7 +5,7 @@
 
 -module(eswf_redir).
 
--export([action/2, swf/2, swf/4]).
+-export([actions/2, swf/2, swf/4]).
 
 %% @type iolist() = [char() | binary() | iolist()]
 %% @type iodata() = iolist() | binary()
@@ -21,18 +21,18 @@ swf(Url, Dimensions) ->
 swf(Url, Dimensions, Fps, FlashVersion) ->
     Tags = [{file_attributes, 1},
 	    {set_background_color, {rgb, 255, 255, 255}},
-	    action(Url, Dimensions),
+	    {do_action, actions(Url, Dimensions)},
 	    show_frame],
     eswf:encswf(FlashVersion, Dimensions, Fps, Tags).
 
-%% @spec action(Url, {Width, Height}) -> {do_action, Actions}
-%% @doc Return a do_action tag that does a loadMovie to Url with a
+%% @spec actions(Url, {Width, Height}) -> [Action]
+%% @doc Return actions for a do_action tag that does a loadMovie to Url with a
 %%      registration point at the center. The center of the loaded movie clip
 %%      will be at (0, 0).
-action(Url, {Width, Height}) ->
+actions(Url, {Width, Height}) ->
     Left = -(Width * 0.5),
     Top = -(Height * 0.5),
-    {do_action, [{push, [Url, 1, 1, "ad", 2, "this"]},
+    [{push, [Url, 1, 1, "ad", 2, "this"]},
 		 get_variable,
 		 {push, ["createEmptyMovieClip"]},
 		 call_method,
@@ -44,4 +44,4 @@ action(Url, {Width, Height}) ->
 		 set_member,
 		 {push, ["loadMovie"]},
 		 call_method,
-		 pop]}.
+		 pop].
