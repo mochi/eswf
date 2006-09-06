@@ -16,6 +16,7 @@
 -define(ACTION_GET_MEMBER, 16#4E).
 -define(ACTION_SET_MEMBER, 16#4F).
 -define(ACTION_POP, 16#17).
+-define(ACTION_DEFINE_FUNCTION, 16#9B).
 
 -define(PUSH_STRING, 0).
 -define(PUSH_NULL, 2).
@@ -71,6 +72,15 @@ encaction(set_member) ->
     <<?ACTION_SET_MEMBER>>;
 encaction(pop) ->
     <<?ACTION_POP>>;
+encaction({define_function, Name, Params, Actions}) ->
+    {ParamCount, RevParams} = lists:mapfoldl(fun (Param, {C, Acc}) ->
+						  {1 + C, [[Param, 0] | Acc]}
+					  end, {0, []}, Params),
+    ActionsBin = iolist_to_binary(encactions(Actions)),
+    ActionsLen = size(ActionsBin),
+    Body = [Name, 0, <<ParamCount:16/little>>, lists:reverse(RevParams),
+	    <<ActionsLen:16/little>>, ActionsBin],
+    encaction(?ACTION_DEFINE_FUNCTION, Body);
 encaction({raw, Code}) ->
     <<Code>>;
 encaction({raw, Code, Body}) ->
