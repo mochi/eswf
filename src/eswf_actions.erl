@@ -16,6 +16,7 @@
 -define(ACTION_GET_MEMBER, 16#4E).
 -define(ACTION_SET_MEMBER, 16#4F).
 -define(ACTION_POP, 16#17).
+-define(ACTION_GET_URL, 16#83).
 -define(ACTION_DEFINE_FUNCTION, 16#9B).
 
 -define(PUSH_STRING, 0).
@@ -81,6 +82,8 @@ encaction({define_function, Name, Params, Actions}) ->
     Body = [Name, 0, <<ParamCount:16/little>>, lists:reverse(RevParams),
 	    <<ActionsLen:16/little>>, ActionsBin],
     encaction(?ACTION_DEFINE_FUNCTION, Body);
+encaction({get_url, Url, Target}) ->
+    encaction(?ACTION_GET_URL, [Url, 0, Target, 0]);
 encaction({raw, Code}) ->
     <<Code>>;
 encaction({raw, Code, Body}) ->
