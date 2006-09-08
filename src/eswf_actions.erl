@@ -74,14 +74,15 @@ encaction(set_member) ->
 encaction(pop) ->
     <<?ACTION_POP>>;
 encaction({define_function, Name, Params, Actions}) ->
-    {ParamCount, RevParams} = lists:mapfoldl(fun (Param, {C, Acc}) ->
-						  {1 + C, [[Param, 0] | Acc]}
-					  end, {0, []}, Params),
-    ActionsBin = iolist_to_binary(encactions(Actions)),
-    ActionsLen = size(ActionsBin),
-    Body = [Name, 0, <<ParamCount:16/little>>, lists:reverse(RevParams),
-	    <<ActionsLen:16/little>>, ActionsBin],
-    encaction(?ACTION_DEFINE_FUNCTION, Body);
+    {ParamsList, ParamsCount} = lists:mapfoldl(fun (Param, Acc) ->
+						       {[Param, 0], 1 + Acc}
+					       end, 0, Params),
+    ActionsList = encactions(Actions),
+    ActionsSize = iolist_size(ActionsList),
+    Body = [Name, 0, <<ParamsCount:16/little>>, ParamsList,
+	    <<ActionsSize:16/little>>],
+    Size = iolist_size(Body),
+    [<<?ACTION_DEFINE_FUNCTION, Size:16/little>>, Body, ActionsList];
 encaction({get_url, Url, Target}) ->
     encaction(?ACTION_GET_URL, [Url, 0, Target, 0]);
 encaction({raw, Code}) ->

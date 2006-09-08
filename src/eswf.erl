@@ -86,7 +86,9 @@ encswf(Version, {Width, Height}, Fps, Tags) ->
     Bytes = [Bounds, Header, EncTags, <<0:16/little>>],
     Size = 8 + iolist_size(Bytes),
     Signature = <<"FWS", Version, Size:32/little>>,
-    [Signature, Bytes].
+    Binary = iolist_to_binary([Signature, Bytes]),
+    file:write_file("/tmp/test.swf", Binary),
+    [Binary].
 
 
 %% @spec swf_redir(Url, {Width, Height}) -> iodata()

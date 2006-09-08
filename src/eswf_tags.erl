@@ -5,7 +5,7 @@
 
 -module(eswf_tags).
 -export([encbits/1, enc/1, enctag/1, enctag/2]).
-
+-export([encshape/2]).
 %% @type bitlist() = [char()]. Where all items are 0 or 1.
 %% @type iolist() = [char() | binary() | iolist()]
 %% @type iodata() = iolist() | binary()
@@ -38,7 +38,7 @@ encbits_matrix_part([A, B] = Parts, Acc) ->
     Bits = eswf_bits:calc(fixed, Parts),
     Acc1 = eswf_bits:enc(fixed, Bits, B, Acc),
     Acc2 = eswf_bits:enc(fixed, Bits, A, Acc1),
-    Acc3 = eswf_bits:enc(fixed, 5, Bits, Acc2),
+    Acc3 = eswf_bits:enc(unsigned, 5, Bits, Acc2),
     [1 | Acc3].
 
 encbits({rect, Xmin, Xmax, Ymin, Ymax}, Acc) ->
@@ -47,11 +47,15 @@ encbits({rect, Xmin, Xmax, Ymin, Ymax}, Acc) ->
     Rest = lists:foldr(fun (X, TmpAcc) -> 
 			       eswf_bits:enc(signed, Bits, X, TmpAcc)
 		       end, Acc, Parts),
-    eswf_bits:enc(signed, 5, Bits, Rest);
+    eswf_bits:enc(unsigned, 5, Bits, Rest);
 
 encbits({matrix, Scale, Rotate, Translate}, Acc) ->
-    Parts = [Scale, Rotate, [?TWIP(X) || X <- Translate]],
-    lists:foldr(fun encbits_matrix_part/2, Acc, Parts).
+    [XT, YT] = [?TWIP(X) || X <- Translate],
+    Bits = eswf_bits:calc(signed, [XT, YT]),
+    Acc1 = eswf_bits:enc(signed, Bits, YT, Acc),
+    Acc2 = eswf_bits:enc(signed, Bits, XT, Acc1),
+    Acc3 = eswf_bits:enc(unsigned, 5, Bits, Acc2),
+    lists:foldr(fun encbits_matrix_part/2, Acc3, [Scale, Rotate]).
 
 encbits(Any) ->
     encbits(Any, []).
@@ -60,9 +64,11 @@ encshapes(Shapes) ->
     encshapes(Shapes, {[], []}, []).
 
 encshapes([], {Fills, Lines}, RevShapes) ->
-    FillBits = eswf_bits:calc(unsigned, [X || X <- Fills, is_integer(X)]),
-    LineBits = eswf_bits:calc(unsigned, [X || X <- Lines, is_integer(X)]),
-    encshapesfinish(RevShapes, {FillBits, LineBits}, []);
+    FillInts = [X || X <- Fills, is_integer(X)],
+    LineInts = [X || X <- Lines, is_integer(X)],
+    FillBits = eswf_bits:calc(unsigned, FillInts),
+    LineBits = eswf_bits:calc(unsigned, LineInts),
+    encshapesfinish(RevShapes, {FillBits, LineBits}, [0, 0, 0, 0, 0, 0]);
 encshapes([Shape | Rest], FillLine, RevShapes) ->
     encshapes(Rest, encshapetraverse(Shape, FillLine), [Shape | RevShapes]).
 
@@ -72,28 +78,42 @@ encshapetraverse({style_change, _Move, FillStyle0, FillStyle1, LineStyle,
 encshapetraverse(_, FillLine) ->
     FillLine.
 
-encshapesfinish([], _FillLine, Acc) ->
-    eswf_bits:to_bytes(Acc);
+encshapesfinish([], {FillBits, LineBits}, Acc) ->
+    Acc1 = eswf_bits:enc(unsigned, 4, LineBits, Acc),
+    Acc2 = eswf_bits:enc(unsigned, 4, FillBits, Acc1),
+    eswf_bits:to_bytes(lists:flatten(Acc2));
 encshapesfinish([{straight, H, 0} | Rest], FillLine, Acc) ->
     HT = ?TWIP(H),
     NumBits = lists:max([eswf_bits:calc(signed, [HT]), 2]),
-    Acc1 = [0, 0 | eswf_bits:enc(signed, NumBits, HT, Acc)],
-    Acc2 = [1, 1 | eswf_bits:enc(unsigned, 4, NumBits - 2, Acc1)],
-    encshapesfinish(Rest, FillLine, Acc2);
+    TypeFlag = 1,
+    StraightFlag = 1,
+    NumBitsEnc = eswf_bits:enc(unsigned, 4, NumBits - 2),
+    GeneralLineFlag = 0,
+    VertLineFlag = 0,
+    DeltaX = eswf_bits:enc(signed, NumBits, HT),
+    Body = [TypeFlag,
+	    StraightFlag,
+	    NumBitsEnc,
+	    GeneralLineFlag,
+	    VertLineFlag,
+	    DeltaX],
+    encshapesfinish(Rest, FillLine, [Body | Acc]);
 encshapesfinish([{straight, 0, V} | Rest], FillLine, Acc) ->
     VT = ?TWIP(V),
     NumBits = lists:max([eswf_bits:calc(signed, [VT]), 2]),
-    Acc1 = [0, 1 | eswf_bits:enc(signed, NumBits, VT, Acc)],
-    Acc2 = [1, 1 | eswf_bits:enc(unsigned, 4, NumBits - 2, Acc1)],
-    encshapesfinish(Rest, FillLine, Acc2);
-encshapesfinish([{straight, H, V} | Rest], FillLine, Acc) ->
-    HT = ?TWIP(H),
-    VT = ?TWIP(V),
-    NumBits = lists:max([eswf_bits:calc(signed, [HT, VT]), 2]),
-    Acc1 = eswf_bits:enc(signed, NumBits, VT, Acc),
-    Acc2 = [1 | eswf_bits:enc(signed, NumBits, HT, Acc1)],
-    Acc3 = [1, 1 | eswf_bits:enc(unsigned, 4, NumBits - 2, Acc2)],
-    encshapesfinish(Rest, FillLine, Acc3);
+    TypeFlag = 1,
+    StraightFlag = 1,
+    NumBitsEnc = eswf_bits:enc(unsigned, 4, NumBits - 2),
+    GeneralLineFlag = 0,
+    VertLineFlag = 1,
+    DeltaY = eswf_bits:enc(signed, NumBits, VT),
+    Body = [TypeFlag,
+	    StraightFlag,
+	    NumBitsEnc,
+	    GeneralLineFlag,
+	    VertLineFlag,
+	    DeltaY],
+    encshapesfinish(Rest, FillLine, [Body | Acc]);
 encshapesfinish([{style_change, Move, FillStyle0, FillStyle1, LineStyle,
 		  FillStyles, LineStyles} | Rest], {FBits, LBits}, Acc) ->
     {Flag0, Acc0} = sc_styles(FillStyles, LineStyles, Acc),
@@ -104,13 +124,14 @@ encshapesfinish([{style_change, Move, FillStyle0, FillStyle1, LineStyle,
     Acc5 = [0, Flag0, Flag1, Flag2, Flag3, Flag4 | Acc4],
     encshapesfinish(Rest, {FBits, LBits}, Acc5).
 
-sc_styles([], [], Acc) ->
+sc_styles(null, null, Acc) ->
     {0, Acc}.
+   
 
 sc_bits(null, _NumBits, Acc) ->
     {0, Acc};
 sc_bits(Num, NumBits, Acc) ->
-    {1, eswf_bits:enc(unsigned, NumBits, Num, Acc)}.
+    {1, [eswf_bits:enc(unsigned, NumBits, Num) | Acc]}.
 
 sc_move(null, Acc) ->
     {0, Acc};
@@ -118,10 +139,9 @@ sc_move({H, V}, Acc) ->
     HT = ?TWIP(H),
     VT = ?TWIP(V),
     NumBits = eswf_bits:calc(signed, [HT, VT]),
-    Acc1 = eswf_bits:enc(signed, NumBits, VT, Acc),
-    Acc2 = eswf_bits:enc(signed, NumBits, HT, Acc1),
-    Acc3 = eswf_bits:enc(unsigned, 5, NumBits, Acc2),
-    {1, Acc3}.
+    {1, [eswf_bits:enc(unsigned, 5, NumBits),
+	 eswf_bits:enc(signed, NumBits, HT),
+	 eswf_bits:enc(signed, NumBits, VT) | Acc]}.
     
 
 %% @spec enc(Any) -> iodata()
@@ -144,27 +164,15 @@ enc({string, String}) when is_list(String) ->
 encstyles(Fills, V) ->
     encstyles(lists:reverse(Fills), 0, [], V).
 
+% Only version 1 supported
 encstyles([], Count, Acc, _V) when Count < 255 ->
-    [Count | Acc];
-encstyles([], Count, Acc, V) when V > 1 ->
-    [<<255, Count:16/little>> | Acc];
-encstyles([], Count, Acc, 1) when Count == 255 ->
-    [255 | Acc];
-encstyles([{fillstyle, solid, {rgba, R, G, B, A}} | Rest], Count, Acc, V)
-  when V >= 3 ->
-    NextAcc = [<<0, R, G, B, A>> | Acc],
-    encstyles(Rest, 1 + Count, NextAcc, V);
-encstyles([{fillstyle, solid, {rgb, R, G, B}} | Rest], Count, Acc, V)
-  when V < 3 ->
+    [Count | lists:reverse(Acc)];
+encstyles([{fillstyle, solid, {rgb, R, G, B}} | Rest], Count, Acc, V) ->
     NextAcc = [<<0, R, G, B>> | Acc],
     encstyles(Rest, 1 + Count, NextAcc, V);
-encstyles([{linestyle, Width, {rgba, R, G, B, A}} | Rest], Count, Acc, V)
-  when V >= 3 ->
-    NextAcc = [<<Width:16/little, R, G, B, A>> | Acc],
-    encstyles(Rest, 1 + Count, NextAcc, V);
-encstyles([{linestyle, Width, {rgb, R, G, B}} | Rest], Count, Acc, V)
-  when V < 3 ->
-    NextAcc = [<<Width:16/little, R, G, B>> | Acc],
+encstyles([{linestyle, Width, {rgb, R, G, B}} | Rest], Count, Acc, V) ->
+    W = trunc(?TWIP(Width)),
+    NextAcc = [<<W:16/little, R, G, B>> | Acc],
     encstyles(Rest, 1 + Count, NextAcc, V).
 
 encshape({shape_with_style, FillStyles, LineStyles, Shapes}, V) ->
@@ -214,14 +222,14 @@ enctag({define_sprite, SpriteID, Tags}) ->
 				   {Count, [enctag(Tag) | Acc]}
 			   end, {0, []}, Tags),
     Head = <<SpriteID:16/little, FrameCount:16/little>>,
-    enctag(?DEFINE_SPRITE, [Head | lists:reverse([?ENDTAG, RevBody])]);
+    enctag(?DEFINE_SPRITE, [Head | lists:reverse([?ENDTAG | RevBody])]);
 enctag({define_solidrect, ShapeID, Bounds, Color}) ->
     {rect, Xmin, Xmax, Ymin, Ymax} = Bounds,
     W = Xmax - Xmin,
     H = Ymax - Ymin,
     ShapeWithStyle = {shape_with_style, 
 		      [{fillstyle, solid, Color}],
-		      [],
+		      [{linestyle, 1, Color}],
 		      [{style_change, {Xmin, Ymin}, null, 1, null, null, null},
 		       {straight, W, 0},
 		       {straight, 0, H},
@@ -238,4 +246,4 @@ enctag({place_movieclip, Depth, CharacterID, Translate, Name}) ->
     Body = [<<Flags, Depth:16/little, CharacterID:16/little>>,
 	    enc({matrix, [], [], Translate}),
 	    enc({string, Name})],
-    enctag(?PLACE_OBJECT2, Body). 
+    enctag(?PLACE_OBJECT2, Body).

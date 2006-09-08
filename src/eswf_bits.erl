@@ -13,18 +13,23 @@
 %% @doc Returns the number of bits required to represent each number of list.
 calc(unsigned, [])   -> 0;
 calc(unsigned, List) -> calc(unsigned, lists:max(List), 0);
-calc(signed, List)   -> 1 + calc(unsigned, List);
+calc(signed, List)   -> 1 + calc(unsigned, [abs(X) || X <- List]);
 calc(fixed, [])      -> 1;
 calc(fixed, List)    ->
-    1 + calc(unsigned, abs(trunc(lists:max(List) * 65536)), 0).
+    1 + calc(unsigned, trunc(65536 * lists:max([abs(X) || X <- List])), 0).
 
-calc(unsigned, 0, Pos)                 -> Pos;
-calc(unsigned, Num, Pos) when Pos < 32 -> calc(unsigned, Num bsr 1, Pos + 1).
+calc(unsigned, Num, 0) when is_float(Num) -> calc(unsigned, trunc(Num), 0);
+calc(unsigned, 0, Pos)                    -> Pos;
+calc(unsigned, Num, Pos) when Pos < 32    -> calc(unsigned, Num bsr 1, Pos + 1).
 
 %% @spec enc(Kind::bit_format(), Bits, Num, Acc) -> list()
 %% @doc Returns Num converted to Kind as a Bits-long list, prepended to Acc.
 enc(_, 0, _, Acc) ->
     Acc;
+enc(unsigned, Bits, Num, Acc) when is_float(Num) ->
+    enc(unsigned, Bits, trunc(Num), Acc);
+enc(signed, Bits, Num, Acc) when is_float(Num) ->
+    enc(signed, Bits, trunc(Num), Acc);
 enc(unsigned, Bits, Num, Acc) when Bits >= 8 ->
     % Unlikely to be worth implementing a 16-bit or 32-bit optimization.
     NextBits = Bits - 8,
@@ -67,6 +72,7 @@ to_bytes(List, Acc) ->
 test() ->
     ok = test(to_bytes),
     ok = test(enc),
+    ok = test(calc),
     ok.
 
 test(to_bytes) ->
