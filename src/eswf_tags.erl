@@ -165,12 +165,25 @@ encstyles(Fills, V) ->
     encstyles(lists:reverse(Fills), 0, [], V).
 
 % Only version 1 supported
+encstyles([], Count, Acc, V) when V > 1, Count >= 255 ->
+    [<<255, Count:16/little>> | lists:reverse(Acc)];
 encstyles([], Count, Acc, _V) when Count < 255 ->
     [Count | lists:reverse(Acc)];
-encstyles([{fillstyle, solid, {rgb, R, G, B}} | Rest], Count, Acc, V) ->
+encstyles([{fillstyle, solid, {rgba, R, G, B, A}} | Rest], Count, Acc, V) 
+  when V >= 3 ->
+    NextAcc = [<<0, R, G, B, A>> | Acc],
+    encstyles(Rest, 1 + Count, NextAcc, V);
+encstyles([{linestyle, Width, {rgba, R, G, B, A}} | Rest], Count, Acc, V) 
+  when V >= 3 ->
+    W = trunc(?TWIP(Width)),
+    NextAcc = [<<W:16/little, R, G, B, A>> | Acc],
+    encstyles(Rest, 1 + Count, NextAcc, V);
+encstyles([{fillstyle, solid, {rgb, R, G, B}} | Rest], Count, Acc, V) 
+  when V < 3 ->
     NextAcc = [<<0, R, G, B>> | Acc],
     encstyles(Rest, 1 + Count, NextAcc, V);
-encstyles([{linestyle, Width, {rgb, R, G, B}} | Rest], Count, Acc, V) ->
+encstyles([{linestyle, Width, {rgb, R, G, B}} | Rest], Count, Acc, V) 
+  when V < 3 ->
     W = trunc(?TWIP(Width)),
     NextAcc = [<<W:16/little, R, G, B>> | Acc],
     encstyles(Rest, 1 + Count, NextAcc, V).
@@ -224,6 +237,12 @@ enctag({define_sprite, SpriteID, Tags}) ->
     Head = <<SpriteID:16/little, FrameCount:16/little>>,
     enctag(?DEFINE_SPRITE, [Head | lists:reverse([?ENDTAG | RevBody])]);
 enctag({define_solidrect, ShapeID, Bounds, Color}) ->
+    DefineShape = case Color of
+		      {rgba, _, _, _, _} ->
+			  define_shape3;
+		      _ ->
+			  define_shape
+		  end,
     {rect, Xmin, Xmax, Ymin, Ymax} = Bounds,
     W = Xmax - Xmin,
     H = Ymax - Ymin,
@@ -235,7 +254,7 @@ enctag({define_solidrect, ShapeID, Bounds, Color}) ->
 		       {straight, 0, H},
 		       {straight, -W, 0},
 		       {straight, 0, -H}]},
-    enctag({define_shape, ShapeID, Bounds, ShapeWithStyle});
+    enctag({DefineShape, ShapeID, Bounds, ShapeWithStyle});
 enctag({place_anon, Depth, CharacterID, Translate}) ->
     Flags = 2#00000110, %% Name, Matrix, Character
     Body = [<<Flags, Depth:16/little, CharacterID:16/little>>,

@@ -30,6 +30,7 @@
 -define(ACTION_GET_PROPERTY, 16#22).
 -define(ACTION_SET_PROPERTY, 16#23).
 -define(ACTION_STORE_REGISTER, 16#87).
+-define(ACTION_TRACE, 16#26).
 
 -define(P_x, 0).
 -define(P_y, 1).
@@ -187,8 +188,10 @@ encaction(less) ->
     <<?ACTION_LESS>>;
 encaction(delete) ->
     <<?ACTION_DELETE>>;
+encaction(trace) ->
+    <<?ACTION_TRACE>>;
 encaction({store_register, N}) ->
-    encaction(<<?ACTION_STORE_REGISTER>>, <<N>>);
+    encaction(?ACTION_STORE_REGISTER, <<N>>);
 encaction({'if', Bytes}) when is_integer(Bytes) ->
     encaction(?ACTION_IF, <<Bytes:16/little>>);
 encaction({'if', Actions}) when is_list(Actions) ->
