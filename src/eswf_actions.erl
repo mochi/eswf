@@ -18,6 +18,41 @@
 -define(ACTION_POP, 16#17).
 -define(ACTION_GET_URL, 16#83).
 -define(ACTION_DEFINE_FUNCTION, 16#9B).
+-define(ACTION_GET_TIME, 16#34).
+-define(ACTION_RETURN, 16#3E).
+-define(ACTION_IF, 16#9D).
+-define(ACTION_STACK_SWAP, 16#4D).
+-define(ACTION_MULTIPLY, 16#0C).
+-define(ACTION_SUBTRACT, 16#0B).
+-define(ACTION_GREATER, 16#67).
+-define(ACTION_LESS, 16#0F).
+-define(ACTION_DELETE, 16#3A).
+-define(ACTION_GET_PROPERTY, 16#22).
+-define(ACTION_SET_PROPERTY, 16#23).
+-define(ACTION_STORE_REGISTER, 16#87).
+
+-define(P_x, 0).
+-define(P_y, 1).
+-define(P_xscale, 2).
+-define(P_yscale, 3).
+-define(P_currentframe, 4).
+-define(P_totalframes, 5).
+-define(P_alpha, 6).
+-define(P_visible, 7).
+-define(P_width, 8).
+-define(P_height, 9).
+-define(P_rotation, 10).
+-define(P_target, 11).
+-define(P_framesloaded, 12).
+-define(P_name, 13).
+-define(P_droptarget, 14).
+-define(P_url, 15).
+-define(P_highquality, 16).
+-define(P_focusrect, 17).
+-define(P_soundbuftime, 18).
+-define(P_quality, 19).
+-define(P_xmouse, 20).
+-define(P_ymouse, 21).
 
 -define(PUSH_STRING, 0).
 -define(PUSH_NULL, 2).
@@ -29,8 +64,62 @@
 -define(PUSH_CONSTANT, 8).
 -define(PUSH_CONSTANT2, 9).
 
+propvalue(x) ->
+    ?P_x;
+propvalue(y) ->
+    ?P_y;
+propvalue(xscale) ->
+    ?P_xscale;
+propvalue(yscale) ->
+    ?P_yscale;
+propvalue(currentframe) ->
+    ?P_currentframe;
+propvalue(totalframes) ->
+    ?P_totalframes;
+propvalue(alpha) ->
+    ?P_alpha;
+propvalue(visible) ->
+    ?P_visible;
+propvalue(width) ->
+    ?P_width;
+propvalue(height) ->
+    ?P_height;
+propvalue(rotation) ->
+    ?P_rotation;
+propvalue(target) ->
+    ?P_target;
+propvalue(framesloaded) ->
+    ?P_framesloaded;
+propvalue(name) ->
+    ?P_name;
+propvalue(droptarget) ->
+    ?P_droptarget;
+propvalue(url) ->
+    ?P_url;
+propvalue(highquality) ->
+    ?P_highquality;
+propvalue(focusrect) ->
+    ?P_focusrect;
+propvalue(soundbuftime) ->
+    ?P_quality;
+propvalue(xmouse) ->
+    ?P_xmouse;
+propvalue(ymouse) ->
+    ?P_ymouse.
+
 encpush(String) when is_list(String) ->
     [?PUSH_STRING, String, 0];
+encpush({prop, Atom}) ->
+    Value = propvalue(Atom),
+    <<Value>>;
+encpush(r0) ->
+    encpush({register, 0});
+encpush(r1) ->
+    encpush({register, 1});
+encpush(r2) ->
+    encpush({register, 2});
+encpush(r3) ->
+    encpush({register, 3});
 encpush(null) ->
     <<?PUSH_NULL>>;
 encpush(undefined) ->
@@ -61,6 +150,15 @@ encaction(Code, Body) when Code >= 16#80 ->
 %% @doc Convert a high-level SWF action to iodata().
 encaction({push, Values}) ->
     encaction(?ACTION_PUSH, [encpush(X) || X <- Values]);
+encaction({get_property, Target, Prop}) ->
+    [encaction({push, [Target, propvalue(Prop)]}), <<?ACTION_GET_PROPERTY>>];
+encaction({set_property, Target, Prop, Value}) ->
+    [encaction({push, [Target, propvalue(Prop), Value]}),
+     <<?ACTION_GET_PROPERTY>>];
+encaction(get_property) ->
+    <<?ACTION_GET_PROPERTY>>;
+encaction(set_property) ->
+    <<?ACTION_SET_PROPERTY>>;
 encaction(get_variable) ->
     <<?ACTION_GET_VARIABLE>>;
 encaction(call_method) ->
@@ -73,6 +171,29 @@ encaction(set_member) ->
     <<?ACTION_SET_MEMBER>>;
 encaction(pop) ->
     <<?ACTION_POP>>;
+encaction(get_time) ->
+    <<?ACTION_GET_TIME>>;
+encaction(return) ->
+    <<?ACTION_RETURN>>;
+encaction(stack_swap) ->
+    <<?ACTION_STACK_SWAP>>;
+encaction(multiply) ->
+    <<?ACTION_MULTIPLY>>;
+encaction(subtract) ->
+    <<?ACTION_SUBTRACT>>;
+encaction(greater) ->
+    <<?ACTION_GREATER>>;
+encaction(less) ->
+    <<?ACTION_LESS>>;
+encaction(delete) ->
+    <<?ACTION_DELETE>>;
+encaction({store_register, N}) ->
+    encaction(<<?ACTION_STORE_REGISTER>>, <<N>>);
+encaction({'if', Bytes}) when is_integer(Bytes) ->
+    encaction(?ACTION_IF, <<Bytes:16/little>>);
+encaction({'if', Actions}) when is_list(Actions) ->
+    Encoded = [encaction(X) || X <- Actions],
+    [encaction({'if', iolist_size(Encoded)}) | Encoded];
 encaction({define_function, Name, Params, Actions}) ->
     {ParamsList, ParamsCount} = lists:mapfoldl(fun (Param, Acc) ->
 						       {[Param, 0], 1 + Acc}
