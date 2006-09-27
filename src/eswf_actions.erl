@@ -212,7 +212,9 @@ encaction({get_url, Url, Target}) ->
 encaction({raw, Code}) ->
     <<Code>>;
 encaction({raw, Code, Body}) ->
-    encaction(Code, Body).
+    encaction(Code, Body);
+encaction(List) when is_list(List) ->
+    [encaction(X) || X <- List].
 
 %% @spec encactions(Actions::List) -> iodata()
 %% @doc Convert a list of high-level SWF actions to iodata().
