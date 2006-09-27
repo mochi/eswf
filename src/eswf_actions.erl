@@ -12,6 +12,7 @@
 -define(ACTION_PUSH, 16#96).
 -define(ACTION_GET_VARIABLE, 16#1C).
 -define(ACTION_CALL_METHOD, 16#52).
+-define(ACTION_NEW_OBJECT, 16#40).
 -define(ACTION_PUSH_DUPLICATE, 16#4C).
 -define(ACTION_GET_MEMBER, 16#4E).
 -define(ACTION_SET_MEMBER, 16#4F).
@@ -190,6 +191,8 @@ encaction(delete) ->
     <<?ACTION_DELETE>>;
 encaction(trace) ->
     <<?ACTION_TRACE>>;
+encaction(new_object) ->
+    <<?ACTION_NEW_OBJECT>>;
 encaction({store_register, N}) ->
     encaction(?ACTION_STORE_REGISTER, <<N>>);
 encaction({'if', Bytes}) when is_integer(Bytes) ->
