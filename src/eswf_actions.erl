@@ -9,9 +9,19 @@
 %% @type iolist() = [char() | binary() | iolist()]
 %% @type iodata() = iolist() | binary()
 
+-define(ACTION_INIT_ARRAY, 16#42).
+-define(ACTION_INIT_OBJECT, 16#43).
+-define(ACTION_EQUALS, 16#0E).
+-define(ACTION_AND, 16#10).
+-define(ACTION_OR, 16#11).
+-define(ACTION_NOT, 16#12).
+-define(ACTION_STRING_EQUALS, 16#13).
+-define(ACTION_STRING_EXTRACT, 16#15).
 -define(ACTION_PUSH, 16#96).
+-define(ACTION_STRING_ADD, 16#21).
 -define(ACTION_GET_VARIABLE, 16#1C).
 -define(ACTION_CALL_METHOD, 16#52).
+-define(ACTION_CALL_FUNCTION, 16#3D).
 -define(ACTION_NEW_OBJECT, 16#40).
 -define(ACTION_PUSH_DUPLICATE, 16#4C).
 -define(ACTION_GET_MEMBER, 16#4E).
@@ -65,6 +75,23 @@
 -define(PUSH_INTEGER, 7).
 -define(PUSH_CONSTANT, 8).
 -define(PUSH_CONSTANT2, 9).
+
+revlen([], Length, Acc) ->
+    {Length, Acc};
+revlen([Item | Rest], Length, Acc) ->
+    revlen(Rest, 1 + Length, [Item | Acc]).
+
+revlen(List) ->
+    revlen(List, 0, []).
+
+revpairs([], Length, Acc) ->
+    {Length, Acc};
+revpairs([{Key, Value} | Rest], Length, Acc) ->
+    revpairs(Rest, 1 + Length, [Key, Value | Acc]).
+
+
+revpairs(Pairs) ->
+    revpairs(Pairs, 0, []).
 
 propvalue(x) ->
     ?P_x;
@@ -165,8 +192,12 @@ encaction(get_variable) ->
     <<?ACTION_GET_VARIABLE>>;
 encaction(call_method) ->
     <<?ACTION_CALL_METHOD>>;
+encaction(call_function) ->
+    <<?ACTION_CALL_FUNCTION>>;
 encaction(push_duplicate) ->
     <<?ACTION_PUSH_DUPLICATE>>;
+encaction(string_add) ->
+    <<?ACTION_STRING_ADD>>;
 encaction(get_member) ->
     <<?ACTION_GET_MEMBER>>;
 encaction(set_member) ->
@@ -193,13 +224,43 @@ encaction(trace) ->
     <<?ACTION_TRACE>>;
 encaction(new_object) ->
     <<?ACTION_NEW_OBJECT>>;
+encaction('and') ->
+    <<?ACTION_AND>>;
+encaction('or') ->
+    <<?ACTION_OR>>;
+encaction('not') ->
+    <<?ACTION_NOT>>;
+encaction(equals) ->
+    <<?ACTION_EQUALS>>;
+encaction(string_equals) ->
+    <<?ACTION_STRING_EQUALS>>;
+encaction(string_extract) ->
+    <<?ACTION_STRING_EXTRACT>>;
+encaction(init_array) ->
+    <<?ACTION_INIT_ARRAY>>;
+encaction(init_object) ->
+    <<?ACTION_INIT_OBJECT>>;
 encaction({store_register, N}) ->
     encaction(?ACTION_STORE_REGISTER, <<N>>);
+encaction({init_array, Array}) ->
+    {Length, RevArray} = revlen(Array),
+    encaction([{push, RevArray},
+	       {push, [Length]},
+	       init_array]);
+encaction({init_object, Pairs}) ->
+    {Length, RevPairs} = revpairs(Pairs),
+    encaction([{push, RevPairs},
+	       {push, [Length]},
+	       init_object]);
 encaction({'if', Bytes}) when is_integer(Bytes) ->
     encaction(?ACTION_IF, <<Bytes:16/little>>);
 encaction({'if', Actions}) when is_list(Actions) ->
     Encoded = [encaction(X) || X <- Actions],
     [encaction({'if', iolist_size(Encoded)}) | Encoded];
+encaction({dowhile, Body}) when is_list(Body) ->
+    Encoded = encaction(Body),
+    JumpOffset = -(5 + iolist_size(Encoded)),
+    [Encoded, encaction({'if', JumpOffset})];
 encaction({define_function, Name, Params, Actions}) ->
     {ParamsList, ParamsCount} = lists:mapfoldl(fun (Param, Acc) ->
 						       {[Param, 0], 1 + Acc}
