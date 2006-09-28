@@ -16,9 +16,11 @@
 -define(ACTION_OR, 16#11).
 -define(ACTION_NOT, 16#12).
 -define(ACTION_STRING_EQUALS, 16#13).
+-define(ACTION_STRING_LENGTH, 16#14).
 -define(ACTION_STRING_EXTRACT, 16#15).
--define(ACTION_PUSH, 16#96).
 -define(ACTION_STRING_ADD, 16#21).
+-define(ACTION_STRING_LESS, 16#29).
+-define(ACTION_PUSH, 16#96).
 -define(ACTION_GET_VARIABLE, 16#1C).
 -define(ACTION_CALL_METHOD, 16#52).
 -define(ACTION_CALL_FUNCTION, 16#3D).
@@ -196,8 +198,6 @@ encaction(call_function) ->
     <<?ACTION_CALL_FUNCTION>>;
 encaction(push_duplicate) ->
     <<?ACTION_PUSH_DUPLICATE>>;
-encaction(string_add) ->
-    <<?ACTION_STRING_ADD>>;
 encaction(get_member) ->
     <<?ACTION_GET_MEMBER>>;
 encaction(set_member) ->
@@ -236,6 +236,12 @@ encaction(string_equals) ->
     <<?ACTION_STRING_EQUALS>>;
 encaction(string_extract) ->
     <<?ACTION_STRING_EXTRACT>>;
+encaction(string_add) ->
+    <<?ACTION_STRING_ADD>>;
+encaction(string_length) ->
+    <<?ACTION_STRING_LENGTH>>;
+encaction(string_less) ->
+    <<?ACTION_STRING_LESS>>;
 encaction(init_array) ->
     <<?ACTION_INIT_ARRAY>>;
 encaction(init_object) ->
