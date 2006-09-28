@@ -87,7 +87,7 @@ encswf(Version, {Width, Height}, Fps, Tags) ->
     Size = 8 + iolist_size(Bytes),
     Signature = <<"FWS", Version, Size:32/little>>,
     Binary = iolist_to_binary([Signature, Bytes]),
-    file:write_file("/tmp/test.swf", Binary),
+    % file:write_file("/tmp/test.swf", Binary),
     [Binary].
 
 
