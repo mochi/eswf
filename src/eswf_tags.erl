@@ -192,7 +192,9 @@ encshape({shape_with_style, FillStyles, LineStyles, Shapes}, V) ->
     FillBytes = encstyles(FillStyles, V),
     LineBytes = encstyles(LineStyles, V),
     ShapeBytes = encshapes(Shapes),
-    [FillBytes, LineBytes, ShapeBytes].
+    [FillBytes, LineBytes, ShapeBytes];
+encshape(Binary, _) when is_binary(Binary) ->
+    Binary.
 
 enctag(Code, Body, Size) when Size < 16#3f ->
     [<<((Code bsl 6) bor Size):16/little>>, Body];
@@ -255,11 +257,14 @@ enctag({define_solidrect, ShapeID, Bounds, Color}) ->
 		       {straight, -W, 0},
 		       {straight, 0, -H}]},
     enctag({DefineShape, ShapeID, Bounds, ShapeWithStyle});
-enctag({place_anon, Depth, CharacterID, Translate}) ->
+enctag({place_anon_matrix, Depth, CharacterID, Matrix}) ->
     Flags = 2#00000110, %% Name, Matrix, Character
     Body = [<<Flags, Depth:16/little, CharacterID:16/little>>,
-	    enc({matrix, [], [], Translate})],
+	    enc(Matrix)],
     enctag(?PLACE_OBJECT2, Body);
+enctag({place_anon, Depth, CharacterID, Translate}) ->
+    Matrix = {matrix, [], [], Translate},
+    enctag({place_anon_matrix, Depth, CharacterID, Matrix});
 enctag({place_movieclip, Depth, CharacterID, Translate, Name}) ->
     Flags = 2#00100110, %% Name, Matrix, Character
     Body = [<<Flags, Depth:16/little, CharacterID:16/little>>,
