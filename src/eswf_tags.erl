@@ -232,6 +232,8 @@ enctag({define_shape2, ShapeID, Bounds, ShapeWithStyle}) ->
     encdefineshape(?DEFINE_SHAPE2, 2, ShapeID, Bounds, ShapeWithStyle);
 enctag({define_shape3, ShapeID, Bounds, ShapeWithStyle}) ->
     encdefineshape(?DEFINE_SHAPE3, 3, ShapeID, Bounds, ShapeWithStyle);
+enctag({define_sprite, SpriteID, Binary}) when is_binary(Binary) ->
+    enctag(?DEFINE_SPRITE, [<<SpriteID:16/little>>, Binary]);
 enctag({define_sprite, SpriteID, Tags}) ->
     {FrameCount, RevBody} = lists:foldl(
 			   fun (show_frame, {Count, Acc}) ->
