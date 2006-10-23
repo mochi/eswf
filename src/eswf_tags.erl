@@ -261,9 +261,19 @@ enctag({define_solidrect, ShapeID, Bounds, Color}) ->
 		       {straight, 0, -H}]},
     enctag({DefineShape, ShapeID, Bounds, ShapeWithStyle});
 enctag({place_anon_matrix, Depth, CharacterID, Matrix}) ->
-    Flags = 2#00000110, %% Name, Matrix, Character
+    Flags = 2#00000110, %% Matrix, Character
     Body = [<<Flags, Depth:16/little, CharacterID:16/little>>,
 	    enc(Matrix)],
+    enctag(?PLACE_OBJECT2, Body);
+enctag({place_move, Depth, Translate}) ->
+    Flags = 2#00000101, %% Matrix, Move
+    Matrix = {matrix, [], [], Translate},
+    Body = [<<Flags, Depth:16/little>>, enc(Matrix)],
+    enctag(?PLACE_OBJECT2, Body);
+enctag({place_swap, Depth, CharacterID, Translate}) ->
+    Flags = 2#00000111, %% Matrix, Character, Move
+    Matrix = {matrix, [], [], Translate},
+    Body = [<<Flags, Depth:16/little, CharacterID:16/little>>, enc(Matrix)],
     enctag(?PLACE_OBJECT2, Body);
 enctag({place_anon, Depth, CharacterID, Translate}) ->
     Matrix = {matrix, [], [], Translate},
