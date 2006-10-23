@@ -270,10 +270,11 @@ enctag({place_move, Depth, Translate}) ->
     Matrix = {matrix, [], [], Translate},
     Body = [<<Flags, Depth:16/little>>, enc(Matrix)],
     enctag(?PLACE_OBJECT2, Body);
-enctag({place_swap, Depth, CharacterID, Translate}) ->
-    Flags = 2#00000111, %% Matrix, Character, Move
+enctag({place_anon_morph, Depth, CharacterID, Translate, Morph}) ->
+    Flags = 2#00010110, %% Ratio, Matrix, Character
     Matrix = {matrix, [], [], Translate},
-    Body = [<<Flags, Depth:16/little, CharacterID:16/little>>, enc(Matrix)],
+    Body = [<<Flags, Depth:16/little, CharacterID:16/little, Morph:16/little>>,
+	    enc(Matrix)],
     enctag(?PLACE_OBJECT2, Body);
 enctag({place_anon, Depth, CharacterID, Translate}) ->
     Matrix = {matrix, [], [], Translate},
