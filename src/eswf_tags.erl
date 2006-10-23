@@ -21,6 +21,7 @@
 -define(DEFINE_SHAPE3, 32).
 -define(PLACE_OBJECT2, 26).
 -define(DEFINE_SPRITE, 39).
+-define(REMOVE_OBJECT2, 28).
 -define(DO_ACTION, 12).
 -define(DEFINE_TEXT, 11).
 -define(DEFINE_FONT2, 48).
@@ -219,6 +220,8 @@ enctag({do_action, Actions}) ->
     enctag(?DO_ACTION, eswf_actions:encactions(Actions));
 enctag(show_frame) ->
     enctag(?SHOW_FRAME, []);
+enctag({remove_object2, Depth}) ->
+    enctag(?REMOVE_OBJECT2, <<Depth:16/little>>);
 enctag({define_text, CharacterID, Data}) ->
     enctag(?DEFINE_TEXT, [<<CharacterID:16/little>>, Data]);
 enctag({define_font2, FontID, Data}) ->
