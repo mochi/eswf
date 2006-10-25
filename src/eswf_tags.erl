@@ -212,6 +212,8 @@ encdefineshape(Code, V, ShapeID, Bounds, Shape) ->
 
 %% @spec enctag(Any) -> iolist()
 %% @doc Convert a high-level SWF tag to iodata().
+enctag({raw, Code, Body}) ->
+    enctag(Code, Body);
 enctag({file_attributes, Flags}) ->
     enctag(?FILE_ATTRIBUTES, <<Flags:32/little>>);
 enctag({set_background_color, Color}) ->
