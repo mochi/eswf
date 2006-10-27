@@ -12,6 +12,7 @@
 -define(ACTION_INIT_ARRAY, 16#42).
 -define(ACTION_INIT_OBJECT, 16#43).
 -define(ACTION_EQUALS, 16#0E).
+-define(ACTION_STRICT_EQUALS, 16#66).
 -define(ACTION_AND, 16#10).
 -define(ACTION_OR, 16#11).
 -define(ACTION_NOT, 16#12).
@@ -232,6 +233,8 @@ encaction('not') ->
     <<?ACTION_NOT>>;
 encaction(equals) ->
     <<?ACTION_EQUALS>>;
+encaction(strict_equals) ->
+    <<?ACTION_STRICT_EQUALS>>;
 encaction(string_equals) ->
     <<?ACTION_STRING_EQUALS>>;
 encaction(string_extract) ->
