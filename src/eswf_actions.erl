@@ -45,6 +45,8 @@
 -define(ACTION_SET_PROPERTY, 16#23).
 -define(ACTION_STORE_REGISTER, 16#87).
 -define(ACTION_TRACE, 16#26).
+-define(ACTION_ENUMERATE2, 16#55).
+-define(ACTION_TYPEOF, 16#44).
 
 -define(P_x, 0).
 -define(P_y, 1).
@@ -249,6 +251,19 @@ encaction(init_array) ->
     <<?ACTION_INIT_ARRAY>>;
 encaction(init_object) ->
     <<?ACTION_INIT_OBJECT>>;
+encaction(enumerate) ->
+    <<?ACTION_ENUMERATE2>>;
+encaction(typeof) ->
+    <<?ACTION_TYPEOF>>;
+encaction({enumerate, L}) ->
+    encaction([enumerate,
+	       {dowhile, [push_duplicate,
+			  {push, [undefined]},
+			  strict_equals,
+			  {'if', L},
+			  {push, [undefined]},
+			  strict_equals,
+			  'not']}]);
 encaction({store_register, N}) ->
     encaction(?ACTION_STORE_REGISTER, <<N>>);
 encaction({init_array, Array}) ->
