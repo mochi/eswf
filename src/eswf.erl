@@ -22,7 +22,7 @@ swf_reader(Reader) when is_function(Reader) ->
 	     $F ->
 		 R0;
 	     $C ->
-		 swf_reader:reader({inflate, R0})
+		 eswf_reader:reader({inflate, R0})
 	 end,
     {R2, P0} = R1(1),
     <<RB:5, _:3>> = P0,
