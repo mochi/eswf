@@ -23,6 +23,7 @@
 -define(ACTION_STRING_LESS, 16#29).
 -define(ACTION_PUSH, 16#96).
 -define(ACTION_GET_VARIABLE, 16#1C).
+-define(ACTION_SET_VARIABLE, 16#1D).
 -define(ACTION_CALL_METHOD, 16#52).
 -define(ACTION_CALL_FUNCTION, 16#3D).
 -define(ACTION_NEW_OBJECT, 16#40).
@@ -47,6 +48,19 @@
 -define(ACTION_TRACE, 16#26).
 -define(ACTION_ENUMERATE2, 16#55).
 -define(ACTION_TYPEOF, 16#44).
+-define(ACTION_DEFINE_LOCAL, 16#3C).
+-define(ACTION_DEFINE_LOCAL2, 16#41).
+-define(ACTION_INSTANCE_OF, 16#54).
+-define(ACTION_TO_NUMBER, 16#4A).
+-define(ACTION_TO_STRING, 16#4B).
+-define(ACTION_INCREMENT, 16#50).
+-define(ACTION_DECREMENT, 16#51).
+-define(ACTION_BIT_AND, 16#60).
+-define(ACTION_BIT_OR, 16#61).
+-define(ACTION_BIT_XOR, 16#62).
+-define(ACTION_BIT_LSHIFT, 16#63).
+-define(ACTION_BIT_RSHIFT, 16#64).
+-define(ACTION_BIT_URSHIFT, 16#65).
 
 -define(P_x, 0).
 -define(P_y, 1).
@@ -195,6 +209,8 @@ encaction(set_property) ->
     <<?ACTION_SET_PROPERTY>>;
 encaction(get_variable) ->
     <<?ACTION_GET_VARIABLE>>;
+encaction(set_variable) ->
+    <<?ACTION_SET_VARIABLE>>;
 encaction(call_method) ->
     <<?ACTION_CALL_METHOD>>;
 encaction(call_function) ->
@@ -255,6 +271,45 @@ encaction(enumerate) ->
     <<?ACTION_ENUMERATE2>>;
 encaction(typeof) ->
     <<?ACTION_TYPEOF>>;
+encaction(define_local) ->
+    <<?ACTION_DEFINE_LOCAL>>;
+encaction(define_local2) ->
+    <<?ACTION_DEFINE_LOCAL2>>;
+encaction(instance_of) ->
+    <<?ACTION_INSTANCE_OF>>;
+encaction(to_string) ->
+    <<?ACTION_TO_STRING>>;
+encaction(to_number) ->
+    <<?ACTION_TO_NUMBER>>;
+encaction(increment) ->
+    <<?ACTION_INCREMENT>>;
+encaction(decrement) ->
+    <<?ACTION_DECREMENT>>;
+encaction(bit_and) ->
+    <<?ACTION_BIT_AND>>;
+encaction(bit_or) ->
+    <<?ACTION_BIT_OR>>;
+encaction(bit_xor) ->
+    <<?ACTION_BIT_XOR>>;
+encaction(bit_lshift) ->
+    <<?ACTION_BIT_LSHIFT>>;
+encaction(bit_rshift) ->
+    <<?ACTION_BIT_RSHIFT>>;
+encaction(bit_urshift) ->
+    <<?ACTION_BIT_URSHIFT>>;
+encaction(var) ->
+    encaction(define_local2);
+encaction({var, Name}) ->
+    encaction([{push, [Name]},
+	       define_local2]);
+encaction({get_variable, Name}) ->
+    encaction([{push, [Name]},
+	       get_variable]);
+encaction({new_object, Name}) ->
+    encaction({new_object, Name, []});
+encaction({new_object, Name, L}) ->
+    encaction([{push, lists:reverse(L, [length(L), Name])},
+	       new_object]);
 encaction({enumerate, L}) ->
     encaction([enumerate,
 	       {dowhile, [push_duplicate,
@@ -266,6 +321,10 @@ encaction({enumerate, L}) ->
 			  'not']}]);
 encaction({store_register, N}) ->
     encaction(?ACTION_STORE_REGISTER, <<N>>);
+encaction({store_register, N, L}) ->
+    encaction([L,
+	       {store_register, N},
+	       pop]);
 encaction({init_array, Array}) ->
     {Length, RevArray} = revlen(Array),
     encaction([{push, RevArray},
