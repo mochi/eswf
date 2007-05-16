@@ -1,8 +1,0 @@
-{application,eswf,
- [{description,"eswf handling"},
- {vsn,"%VSN%"},
- {modules,[%MODULES%]},
- {registered, []},
- {env, []},
- %% {mod, {eswf_app, []}},
- {applications,[kernel,stdlib,sasl]}}.
