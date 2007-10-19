@@ -67,7 +67,7 @@ next_inflate(Z, Reader, BytesTotal, Acc) ->
 	    Reader(close),
 	    {reader(<<>>), eof};
 	(Bytes) when Bytes =< BytesTotal ->
-	    [Data | Rest] = chunk_bytes(Acc, Bytes, Bytes, []),
+	    {Data, Rest} = split_binary(iolist_to_binary(Acc), Bytes),
 	    Next = next_inflate(Z, Reader, BytesTotal - Bytes, Rest),
 	    {Next, Data};
 	(Bytes) ->
@@ -80,19 +80,9 @@ next_inflate(Z, Reader, BytesTotal, Acc) ->
 		{Reader1, RawData} ->
 		    Data = zlib:inflate(Z, RawData),
 		    NextTotal = BytesTotal + iolist_size(Data),
-		    Next = next_inflate(Z, Reader1, NextTotal, [Data | Acc]),
+		    Next = next_inflate(Z, Reader1, NextTotal, [Acc | Data]),
 		    Next(Bytes)
 	    end
-    end.
-
-chunk_bytes([First | Rest], BytesTotal, BytesLeft, Acc) ->
-    FirstSize = iolist_size(First),
-    if FirstSize >= BytesLeft ->
-	    AllData = iolist_to_binary(lists:reverse([First | Acc])),
-	    <<Data:BytesTotal/binary, LeftOver/binary>> = AllData,
-	    [Data, LeftOver | Rest];
-	true ->
-	    chunk_bytes(Rest, BytesTotal, BytesLeft - FirstSize, [First | Acc])
     end.
 
 %% @spec test() -> ok
