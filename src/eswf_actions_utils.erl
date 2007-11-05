@@ -28,12 +28,55 @@ stringmap(Fun, Actions) ->
     Edits = stringmap_loop(Fun, P, []),
     eswf_utils:edit(Actions, Edits).
 
+find_null(Bin) ->
+    find_null(Bin, 0).
+
+find_null(Binary, Skip) -> 
+    case Binary of
+        <<String:Skip/binary, 0, Rest/binary>> ->
+            {String, Rest};
+        Binary when Skip < size(Binary) ->
+            find_null(Binary, 1 + Skip)
+    end.
+
+push_loop(_Fun, <<>>, Acc) ->
+    iolist_to_binary(lists:reverse(Acc));
+push_loop(Fun, <<0, Rest/binary>>, Acc) ->
+    {String, Rest1} = find_null(Rest),
+    NewString = case Fun(String) of
+                    skip ->
+                        String;
+                    S ->
+                        S
+                end,
+    push_loop(Fun, Rest1, [[0, NewString, 0] | Acc]);
+push_loop(Fun, <<1, Float:4/binary, Rest/binary>>, Acc) ->
+    push_loop(Fun, Rest, [[1, Float] | Acc]);
+push_loop(Fun, <<2, Rest/binary>>, Acc) ->
+    push_loop(Fun, Rest, [2 | Acc]);
+push_loop(Fun, <<3, Rest/binary>>, Acc) ->
+    push_loop(Fun, Rest, [3 | Acc]);
+push_loop(Fun, <<4, Reg, Rest/binary>>, Acc) ->
+    push_loop(Fun, Rest, [[4, Reg] | Acc]);
+push_loop(Fun, <<5, Bool, Rest/binary>>, Acc) ->
+    push_loop(Fun, Rest, [[5, Bool] | Acc]);
+push_loop(Fun, <<6, Double:8/binary, Rest/binary>>, Acc) ->
+    push_loop(Fun, Rest, [[6, Double] | Acc]);
+push_loop(Fun, <<7, Integer:4/binary, Rest/binary>>, Acc) ->
+    push_loop(Fun, Rest, [[7, Integer] | Acc]);
+push_loop(Fun, <<8, C8, Rest/binary>>, Acc) ->
+    push_loop(Fun, Rest, [[8, C8] | Acc]);
+push_loop(Fun, <<9, C16:2/binary, Rest/binary>>, Acc) ->
+    push_loop(Fun, Rest, [[9, C16] | Acc]).
+
+
 stringmap_loop(Fun, P0, Acc) ->
     {<<Code>>, P1} = bytes(P0, 1),
     case Code of
         0 ->
             lists:reverse(Acc);
         16#88 ->
+            %% ActionConstantPool
             Pre = offset(P1),
             {_Length, P2} = get_ushort(P1),
             Post = offset(P2),
@@ -43,6 +86,21 @@ stringmap_loop(Fun, P0, Acc) ->
             LengthEdit = {Pre, Post, <<(2 + NewLength):16/little>>},
             NewAcc = RevEdits ++ [LengthEdit] ++ Acc,
             stringmap_loop(Fun, P4, NewAcc);
+        16#96 ->
+            %% ActionPush
+            Pre = offset(P1),
+            {Length, P2} = get_ushort(P1),
+            Post = offset(P2),
+            {PushData, P3} = bytes(P2, Length),
+            case push_loop(Fun, PushData, []) of
+                PushData ->
+                    stringmap_loop(Fun, P3, Acc);
+                NewPushData ->
+                    NewLength = size(NewPushData),
+                    NewAcc = [{Post, offset(P3), NewPushData},
+                              {Pre, Post, <<NewLength:16/little>>} | Acc],
+                    stringmap_loop(Fun, P3, NewAcc)
+            end;
         Code when Code < 16#80 ->
             stringmap_loop(Fun, P1, Acc);
         Code ->
