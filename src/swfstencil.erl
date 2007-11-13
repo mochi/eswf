@@ -186,7 +186,7 @@ do_tag(Code, Body, _Fun, UserAcc) when is_binary(Body) ->
 
 export_stencilify(<<>>, 0, _Fun, UserAcc, Acc) ->
     {lists:reverse(Acc), UserAcc};
-export_stencilify(<<SpriteID:16, Rest/binary>>, N, Fun, UserAcc, Acc) when N > 0 ->
+export_stencilify(<<SpriteID:16/little, Rest/binary>>, N, Fun, UserAcc, Acc) when N > 0 ->
     {String, <<0, Rest2/binary>>} = split_binary(Rest, findnull(Rest, 0)),
     {Action, NewUserAcc} = Fun(String, UserAcc),
     Chunk =
@@ -196,7 +196,7 @@ export_stencilify(<<SpriteID:16, Rest/binary>>, N, Fun, UserAcc, Acc) when N > 0
             {punch, Key} ->
                 {hole, Key}
         end,
-    NewAcc = [Chunk, {chunk, <<SpriteID:16>>} | Acc],
+    NewAcc = [Chunk, {chunk, <<SpriteID:16/little>>} | Acc],
     export_stencilify(Rest2, N - 1, Fun, NewUserAcc, NewAcc).
 
 
