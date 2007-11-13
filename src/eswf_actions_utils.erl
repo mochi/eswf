@@ -83,7 +83,7 @@ push_loop(Fun, Acc, <<0, Rest/binary>>, Chunks) ->
             {punch, Key} ->
                 {hole, Key}
         end,
-    push_loop(Fun, NewAcc, Rest2, [NewChunk | Chunks]);
+    push_loop(Fun, NewAcc, Rest2, [NewChunk, {chunk, [0]} | Chunks]);
 push_loop(Fun, Acc, <<1, Float:32/float, Rest/binary>>, Chunks) ->
     push_loop(Fun, Acc, Rest, [{chunk, <<1, Float:32/float>>} | Chunks]);
 push_loop(Fun, Acc, <<2, Rest/binary>>, Chunks) ->

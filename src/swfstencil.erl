@@ -74,9 +74,13 @@ make_tag_header(Code, Length) ->
 
 fill(#stencil{swfversion=Version, zipchunks=SWFTemplate}, Brushes) ->
     %% This part is still slightly gross.
-    AS3 = fun(Key) -> proplists:get_value({as3string, Key}, Brushes) end,
-    AS2 = fun(Key) -> proplists:get_value({as2string, Key}, Brushes) end,
-    Export = fun(Key) -> proplists:get_value({export, Key}, Brushes) end,
+    Brush = fun (Key) ->
+                    {Key, V} = proplists:lookup(Key, Brushes),
+                    V
+            end,
+    AS3 = fun (Key) -> Brush({as3string, Key}) end,
+    AS2 = fun (Key) -> Brush({as2string, Key}) end,
+    Export = fun (Key) -> Brush({export, Key}) end,
     Fun = fun({as3tagheader, BaseSize, Keys}) ->
                   ExtraSize = lists:sum([iolist_size(AS3(Key)) || Key <- Keys]),
                   make_tag_header(82, BaseSize + ExtraSize);
@@ -91,7 +95,7 @@ fill(#stencil{swfversion=Version, zipchunks=SWFTemplate}, Brushes) ->
              ({as2string, Key}) ->
                   AS2(Key);
              ({exportheader, BaseSize, Keys}) ->
-                  ExtraSize = lists:sum([iolist_size(Export(Key)) || Key <- Keys]),
+                  ExtraSize = lists:sum([iolist_size(Brush(Key)) || Key <- Keys]),
                   make_tag_header(52, BaseSize + ExtraSize);
              ({export, Key}) ->
                   Export(Key)
@@ -161,7 +165,7 @@ do_tag(56, <<Count:16/little, Rest/binary>>, Fun, UserAcc) ->
     {Template, NewUserAcc} = export_stencilify(Rest, Count, Fun2, UserAcc, []),
     FixedSize = lists:sum([iolist_size(X) || {chunk, X} <- Template]),
     Keys = [Key || {hole, Key} <- Template],
-    NewElt = [{hole, {exportheader, FixedSize, Keys}} | Template],
+    NewElt = [{hole, {exportheader, 2 + FixedSize, Keys}}, {chunk, <<Count:16/little>>} | Template],
     {NewElt, NewUserAcc};
 do_tag(82, Body, Fun, UserAcc) ->
     %% DoABCDefine
@@ -186,7 +190,7 @@ do_tag(Code, Body, _Fun, UserAcc) when is_binary(Body) ->
 
 export_stencilify(<<>>, 0, _Fun, UserAcc, Acc) ->
     {lists:reverse(Acc), UserAcc};
-export_stencilify(<<SpriteID:16/little, Rest/binary>>, N, Fun, UserAcc, Acc) when N > 0 ->
+export_stencilify(<<SpriteID:16, Rest/binary>>, N, Fun, UserAcc, Acc) when N > 0 ->
     {String, <<0, Rest2/binary>>} = split_binary(Rest, findnull(Rest, 0)),
     {Action, NewUserAcc} = Fun(String, UserAcc),
     Chunk =
@@ -196,7 +200,7 @@ export_stencilify(<<SpriteID:16/little, Rest/binary>>, N, Fun, UserAcc, Acc) whe
             {punch, Key} ->
                 {hole, Key}
         end,
-    NewAcc = [Chunk, {chunk, <<SpriteID:16/little>>} | Acc],
+    NewAcc = [Chunk, {chunk, <<SpriteID:16>>} | Acc],
     export_stencilify(Rest2, N - 1, Fun, NewUserAcc, NewAcc).
 
 
