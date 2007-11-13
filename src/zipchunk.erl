@@ -106,7 +106,7 @@ compute_chunk(Z, Plain, Limit, Rest) ->
 deflate(Z, FlatPlain, Acc) ->
     try
         Buf = zlib:deflate(Z, FlatPlain, full),
-        deflate(Z, <<>>, [Buf | Acc])
+        deflate(Z, [], [Buf | Acc])
     catch
         error:buf_error ->
             lists:reverse(Acc)
@@ -185,11 +185,12 @@ crc32join(S, T, N, Z) when N >= 1 ->
 %% @doc Performs <code>zipchunk</code> unit tests and returns
 %% <code>ok</code>.
 test() ->
-    ok = test(join),
-    ok = test(optimize_and_fill),
+    ok = test_join(),
+    ok = test_optimize_and_fill(),
+    ok = test_deflate(),
     ok.
 
-test(join) ->
+test_join() ->
     application:start(crypto),
     Z = zlib:open(),
     SumchunkTest =
@@ -210,8 +211,9 @@ test(join) ->
     ok = F(F, adler32, adler32, Tests),
     ok = F(F, crc32, crc32, Tests),
     ok = zlib:close(Z),
-    ok;
-test(optimize_and_fill) ->
+    ok.
+
+test_optimize_and_fill() ->
     Tests =
         [{[], fun(_) -> "" end, []},
          {[{chunk, <<"123">>}, {chunk, <<"456">>}],
@@ -247,4 +249,15 @@ test(Template, Fun, Expected) ->
     Plain = zlib:uncompress(iolist_to_binary(Encoded2)),
     Length = size(Plain),
     Plain = iolist_to_binary(Expected),
+    ok.
+
+test_deflate() ->
+    application:start(crypto),
+    Z = zlib:open(),
+    ok = zlib:deflateInit(Z),
+    _ = zlib:deflate(Z, [], full),
+    Orig = crypto:rand_bytes(1000000),
+    Encoded = deflate(Z, Orig, []),
+    ok = zlib:close(Z),
+    Orig = zlib:unzip(iolist_to_binary([Encoded, 3, 0])),
     ok.
