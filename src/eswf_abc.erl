@@ -3,9 +3,12 @@
 
 %% @doc The <code>eswf_abc</code> module provides functions for
 %% manipulating ActionScript Byte Code segments (herein ABC segments).
-%% For details on the ABC data format, see chapter 4 of <a
+%%
+%% A full description of the ABC data format is outside of the
+%% scope of this documentation.  For details, see chapter 4 of <a
 %% href="http://www.adobe.com/devnet/actionscript/articles/avm2overview.pdf"
 %% >ActionScript Virtual Machine 2 Overview</a>.
+
 
 -module(eswf_abc).
 -author(matthew@mochimedia.com).
@@ -13,10 +16,13 @@
 -define(ABCMAJOR, 46).
 -define(ABCMINOR, 16).
 
--export([stringmap/2]).
+-export([stringmap/2, stencilify/3]).
+-export([encode_string/1]).
 -export([test/0]).
 
-%% @spec stringmap(Fun, ABCSegment::binary()) -> iodata()
+%% @type abcsegment() = binary()
+
+%% @spec stringmap(Fun, ABCSegment::abcsegment()) -> iodata()
 %% where
 %%       Fun = (String::binary()) -> iodata() | skip
 %%
@@ -34,6 +40,55 @@
 %% applying <code>stringmap</code> to an invalid ABC segment is
 %% undefined.
 stringmap(Fun, ABCSegment) when is_function(Fun) ->
+    FoldFun = fun(String, Begin, End, Acc) ->
+                      case Fun(String) of
+                          skip ->
+                              Acc;
+                          NewString ->
+                              Encoded = encode_string(NewString),
+                              [{Begin, End, Encoded} | Acc]
+                      end
+              end,
+    {_Begin, Acc, _End} = fold(ABCSegment, FoldFun, []),
+    eswf_utils:edit(ABCSegment, lists:reverse(Acc)).
+
+%% @type template() = [{hole, term()} | {chunk, iodata()}]
+
+%% @spec stencilify(ABCSegment::abcsegment(), Fun, Acc) -> {template(), NewAcc}
+%% where
+%%       Fun = (String::binary()) -> {Action, NewAcc}
+%%       Action = skip | {punch, term()}
+%%
+%% @doc Returns a <code>template()</code> based on
+%% <code>ABCSegment</code>.  For each string constant
+%% <code>String</code> in <code>ABCSegment</code>, <code>Fun(String,
+%% Acc)</code> is evaluated, which should return a tuple with an
+%% action and a new accumulator.  If the action is <code>{punch,
+%% Term}</code>, then the corresponding section of the template
+%% contains <code>{hole, Term}</code>, which should later be replaced
+%% by a valid string constant encoding (see
+%% <code>encode_string/1</code>).  Otherwise, the action must be
+%% <code>skip</code>, and the string constant is left in tact.
+stencilify(ABCSegment, Fun, UserAcc) when is_function(Fun) ->
+    FoldFun = fun(String, Begin, End, {Acc, UAcc}) ->
+                      {Action, NewUAcc} = Fun(String, UAcc),
+                      NewElt = 
+                          case Action of
+                              skip ->
+                                  {chunk, subseg(ABCSegment, Begin, End)};
+                              {punch, Key} ->
+                                  {hole, Key}
+                          end,
+                      {[NewElt | Acc], NewUAcc}
+              end,
+    {Begin, {Acc, NewUserAcc}, End} = fold(ABCSegment, FoldFun, {[], UserAcc}),
+    BeginChunk = {chunk, subseg(ABCSegment, 0, Begin)},
+    EndChunk = {chunk, subseg(ABCSegment, End, all)},
+    Chunks = [BeginChunk | lists:reverse(Acc, [EndChunk])],
+    {Chunks, NewUserAcc}.
+
+
+fold(ABCSegment, Fun, Acc) ->
     P0 = make_parser(ABCSegment),
     {ok, ?ABCMINOR, P1} = parse(u16, P0),
     {ok, ?ABCMAJOR, P2} = parse(u16, P1),
@@ -41,29 +96,24 @@ stringmap(Fun, ABCSegment) when is_function(Fun) ->
     {ok, _UInts, P4} = parse_array(u32, P3),
     {ok, _Doubles, P5} = parse_array(d64, P4),
     {ok, N, P6} = parse(u30, P5),
-    if
-        N > 0 ->
-            Edits = stringmap_loop(Fun, P6, N - 1, []),
-            eswf_utils:edit(ABCSegment, Edits);
-        true ->
-            ABCSegment
-    end.
+    Begin = offset(P6),
+    {Res, P7} =
+        if
+            N > 0 ->
+                fold1(Fun, P6, N - 1, Acc);
+            true ->
+                {Acc, P6}
+        end,
+    End = offset(P7),
+    {Begin, Res, End}.
 
-stringmap_loop(_Fun, _Parser, 0, Acc) ->
-    lists:reverse(Acc);
-stringmap_loop(Fun, Parser, N, Acc) when N > 0 ->
+fold1(_Fun, Parser, 0, Acc) ->
+    {Acc, Parser};
+fold1(Fun, Parser, N, Acc) when N > 0 ->
     Begin = offset(Parser),
     {ok, String, Next} = parse_string(Parser),
     End = offset(Next),
-    NewAcc =
-        case Fun(String) of
-            skip ->
-                Acc;
-            NewString ->
-                Encoded = encode_string(NewString),
-                [{Begin, End, Encoded} | Acc]
-        end,
-    stringmap_loop(Fun, Next, N - 1, NewAcc).
+    fold1(Fun, Next, N - 1, Fun(String, Begin, End, Acc)).
 
 
 %% @spec parse(Type, Parser::parser()) -> {ok, Value, Next::parser()}
@@ -71,8 +121,8 @@ stringmap_loop(Fun, Parser, N, Acc) when N > 0 ->
 %%       Type = u8 | u16 | s24 | u30 | u32 | s32 | d64
 %%
 %% @doc Parses an ABC primitive data value of type <code>Type</code>
-%% from <code>Binary</code>.  Returns the value as the appropriate
-%% Erlang type and the unparsed remainder of the binary segment.
+%% from <code>Parser</code>.  Returns the value cast to the
+%% appropriate Erlang type.
 %%
 %% N.B. Where <code>mxmlc</code> (from the Flex 2 SDK) and the AVM2
 %% specification differ in encoding (e.g., sign extension for
@@ -173,6 +223,14 @@ make_parser(Binary) ->
 bytes({Binary, Offset}, N) ->
     <<_Skip:Offset/binary, Bytes:N/binary, _Rest/binary>> = Binary,
     {Bytes, {Binary, Offset + N}}.
+
+subseg(Binary, Start, all) ->
+    element(2, split_binary(Binary, Start));
+subseg(Binary, Start, Stop) ->
+    Size = Stop - Start,
+    <<_Pre:Start/binary, Want:Size/binary, _Rest/binary>> = Binary,
+    Want.
+    
 
 offset({_Binary, Offset}) ->
     Offset.
