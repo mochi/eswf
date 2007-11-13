@@ -88,17 +88,28 @@ fill(Rest, Fun, Z, Acc, Length, Sum, ChunksAcc) when ChunksAcc =/= [] ->
     fill(compute_chunk(Z, lists:reverse(ChunksAcc), 0, Rest), Fun, Z, Acc, Length, Sum, []).
 
 
-compute_chunk(Z, Plain, Limit, Acc) ->
+compute_chunk(Z, Plain, Limit, Rest) ->
     case iolist_to_binary(Plain) of
         <<>> ->
-            Acc;
+            Rest;
         FlatPlain when size(FlatPlain) < Limit ->
-            [{chunk, FlatPlain} | Acc];
+            [{chunk, FlatPlain} | Rest];
         FlatPlain ->
-            Encoded = zlib:deflate(Z, FlatPlain, full),
+            Encoded = deflate(Z, FlatPlain, []),
             Chunksum = sumchunk(adler32, Z, FlatPlain),
             Length = size(FlatPlain),
-            [{zchunk, Encoded, Length, Chunksum} | Acc]
+            [{zchunk, Encoded, Length, Chunksum} | Rest]
+    end.
+
+%% Flushing the zlib stream doesn't actually wait until it's empty, so
+%% instead we have to do this stupid workaround.
+deflate(Z, FlatPlain, Acc) ->
+    try
+        Buf = zlib:deflate(Z, FlatPlain, full),
+        deflate(Z, <<>>, [Buf | Acc])
+    catch
+        error:buf_error ->
+            lists:reverse(Acc)
     end.
 
 
