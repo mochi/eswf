@@ -101,7 +101,7 @@ push_loop(Fun, Acc, <<7, Int:32/little, Rest/binary>>, Chunks) ->
 push_loop(Fun, Acc, <<8, Ref, Rest/binary>>, Chunks) ->
     push_loop(Fun, Acc, Rest, [{chunk, [8, Ref]} | Chunks]);
 push_loop(Fun, Acc, <<9, Ref:16/little, Rest/binary>>, Chunks) ->
-    push_loop(Fun, Acc, Rest, [{chunks, <<9, Ref:16/little>>} | Chunks]).
+    push_loop(Fun, Acc, Rest, [{chunk, <<9, Ref:16/little>>} | Chunks]).
 
 
 parse_string(Binary) ->
