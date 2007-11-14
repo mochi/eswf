@@ -102,7 +102,8 @@ compute_chunk(Z, Plain, Limit, Rest) ->
     end.
 
 %% Flushing the zlib stream doesn't actually wait until it's empty, so
-%% instead we have to do this stupid workaround.
+%% instead we have to do this stupid workaround.  I submitted a patch
+%% here: http://article.gmane.org/gmane.comp.lang.erlang.patches/185
 deflate(Z, FlatPlain, Acc) ->
     try
         Buf = zlib:deflate(Z, FlatPlain, full),
