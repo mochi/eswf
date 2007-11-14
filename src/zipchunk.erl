@@ -186,13 +186,13 @@ crc32join(S, T, N, Z) when N >= 1 ->
 %% @doc Performs <code>zipchunk</code> unit tests and returns
 %% <code>ok</code>.
 test() ->
+    application:start(crypto),
     ok = test_join(),
     ok = test_optimize_and_fill(),
     ok = test_deflate(),
     ok.
 
 test_join() ->
-    application:start(crypto),
     Z = zlib:open(),
     SumchunkTest =
         fun(M, N, Sum, Type) ->
@@ -253,7 +253,6 @@ test(Template, Fun, Expected) ->
     ok.
 
 test_deflate() ->
-    application:start(crypto),
     Z = zlib:open(),
     ok = zlib:deflateInit(Z),
     _ = zlib:deflate(Z, [], full),
