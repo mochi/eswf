@@ -227,8 +227,8 @@ test_optimize_and_fill() ->
           fun(S) -> ["xy", S, "ab"] end,
           "123xy456ab789"},
          begin
-             A = lists:map(fun(_) -> 42 end, lists:seq(1, 10000)),
-             B = lists:map(fun(_) -> 69 end, lists:seq(1, 50000)),
+             A = crypto:rand_bytes(50000),
+             B = crypto:rand_bytes(100000),
              Msg = "Some reasonably long (but not too long) text to compress",
              {[{chunk, A}, {hole, []}, {chunk, B}],
               fun(_) -> Msg end,
