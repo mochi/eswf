@@ -258,7 +258,7 @@ test_deflate() ->
     ok = zlib:deflateInit(Z),
     _ = zlib:deflate(Z, [], full),
     Orig = crypto:rand_bytes(1000000),
-    Encoded = deflate(Z, Orig, []),
+    Encoded = [deflate(Z, Orig, []) || _ <- lists:seq(1, 10)],
     ok = zlib:close(Z),
-    Orig = zlib:unzip(iolist_to_binary([Encoded, 3, 0])),
+    [Orig = zlib:unzip(iolist_to_binary([E, 3, 0])) || E <- Encoded],
     ok.
