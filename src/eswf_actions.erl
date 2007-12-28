@@ -155,7 +155,7 @@ propvalue(xmouse) ->
 propvalue(ymouse) ->
     ?P_ymouse.
 
-encpush(String) when is_list(String) ->
+encpush(String) when is_list(String) orelse is_binary(String) ->
     [?PUSH_STRING, String, 0];
 encpush({prop, Atom}) ->
     Value = propvalue(Atom),
