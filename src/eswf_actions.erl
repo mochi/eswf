@@ -181,8 +181,10 @@ encpush(false) ->
 encpush(Float) when is_float(Float) ->
     <<Left:32, Right:32>> = <<Float:64/float-little>>,
     <<?PUSH_FLOAT, Right:32, Left:32>>;
-encpush(Int) when is_integer(Int) ->
+encpush(Int) when is_integer(Int) andalso Int >= -2147483648 andalso Int =< 2147483647 ->
     <<?PUSH_INTEGER, Int:32/little>>;
+encpush(Int) when is_integer(Int) ->
+    encpush(float(Int));
 encpush({pool, Index}) when Index < 256 ->
     <<?PUSH_CONSTANT, Index>>;
 encpush({pool, Index}) ->

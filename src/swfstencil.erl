@@ -24,9 +24,7 @@ brush(as2, Key, String) ->
 brush(as3, Key, String) ->
     {{as3string, Key}, eswf_abc:encode_string(String)};
 brush(export, Key, String) ->
-    {{export, Key}, [String, 0]};
-brush(as3export, Key, String) ->
-    {{as3export, Key}, [String, 0]}.
+    {{export, Key}, [String, 0]}.
 
 %% @spec version(Stencil::stencil()) -> integer()
 %%
@@ -83,7 +81,6 @@ fill(#stencil{swfversion=Version, zipchunks=SWFTemplate}, Brushes) ->
     AS3 = fun (Key) -> Brush({as3string, Key}) end,
     AS2 = fun (Key) -> Brush({as2string, Key}) end,
     Export = fun (Key) -> Brush({export, Key}) end,
-    AS3Export = fun (Key) -> Brush({as3export, Key}) end,
     Fun = fun({as3tagheader, BaseSize, Keys}) ->
                   ExtraSize = lists:sum([iolist_size(AS3(Key)) || Key <- Keys]),
                   make_tag_header(82, BaseSize + ExtraSize);
@@ -101,12 +98,7 @@ fill(#stencil{swfversion=Version, zipchunks=SWFTemplate}, Brushes) ->
                   ExtraSize = lists:sum([iolist_size(Brush(Key)) || Key <- Keys]),
                   make_tag_header(52, BaseSize + ExtraSize);
              ({export, Key}) ->
-                  Export(Key);
-             ({symbolclassheader, BaseSize, Keys}) ->
-                  ExtraSize = lists:sum([iolist_size(Brush(Key)) || Key <- Keys]),
-                  make_tag_header(76, BaseSize + ExtraSize);
-             ({as3export, Key}) ->
-                  AS3Export(Key)
+                  Export(Key)
           end,
     {Length, Body} = zipchunk:fill(SWFTemplate, Fun),
     [<<"CWS", Version, (Length + 8):32/little>> | Body].
@@ -174,21 +166,6 @@ do_tag(56, <<Count:16/little, Rest/binary>>, Fun, UserAcc) ->
     FixedSize = lists:sum([iolist_size(X) || {chunk, X} <- Template]),
     Keys = [Key || {hole, Key} <- Template],
     NewElt = [{hole, {exportheader, 2 + FixedSize, Keys}}, {chunk, <<Count:16/little>>} | Template],
-    {NewElt, NewUserAcc};
-do_tag(76, <<Count:16/little, Rest/binary>>, Fun, UserAcc) ->
-    %% SymbolClass
-    Fun2 = fun(Key, UA) ->
-                   case Fun({as3export, Key}, UA) of
-                       {{punch, Term}, NUA} ->
-                           {{punch, {as3export, Term}}, NUA};
-                       {skip, NUA} ->
-                           {skip, NUA}
-                   end
-           end,
-    {Template, NewUserAcc} = export_stencilify(Rest, Count, Fun2, UserAcc, []),
-    FixedSize = lists:sum([iolist_size(X) || {chunk, X} <- Template]),
-    Keys = [Key || {hole, Key} <- Template],
-    NewElt = [{hole, {symbolclassheader, 2 + FixedSize, Keys}}, {chunk, <<Count:16/little>>} | Template],
     {NewElt, NewUserAcc};
 do_tag(82, Body, Fun, UserAcc) ->
     %% DoABCDefine
