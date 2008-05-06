@@ -157,8 +157,13 @@ parse(s32, Binary) ->
             Else
     end;
 parse(d64, Binary) ->
-    {<<Val:64/float-little>>, Next} = bytes(Binary, 8),
-    {ok, Val, Next};
+    case bytes(Binary, 8) of
+        {<<Val:64/float-little>>, Next} ->
+            {ok, Val, Next};
+        {Bytes, Next} ->
+            %% Erlang doesn't like Inf or NaN. :-(
+            {ok, {double, Bytes}, Next}
+    end;
 parse(Type, _Binary) ->
     throw({badtype, Type}).
 
@@ -266,11 +271,11 @@ encode_string(String) ->
 %% @doc Performs several unit tests and returns <code>ok</code>
 %% (hopefully).
 test() ->
-    ok = test(parse),
-    ok = test(stringmap),
+    ok = test_parse(),
+    ok = test_stringmap(),
     ok.
 
-test(parse) ->
+test_parse() ->
     V = [{u8, 0, <<0>>},
          {u8, 42, <<42>>},
          {u16, 258, <<2,1>>},
@@ -287,6 +292,11 @@ test(parse) ->
          {d64, 4.0e+9, <<0,0,0,0,101,205,237,65>>},
          {d64, 9007199254740993.0, <<0,0,0,0,0,0,64,67>>},
 
+         %% I don't particularly care what these return, but they
+         %% shouldn't crash.
+         {d64, '_', <<0,0,0,0,0,0,240,127>>}, %% Inf
+         {d64, '_', <<0,0,0,0,0,0,248,127>>}, %% NaN
+
          %% N.B. These test cases stand contrary to how the AVM2
          %% specification describes the encoding of s32 values, but
          %% they are how mxmlc encodes them.
@@ -296,11 +306,14 @@ test(parse) ->
          ],
     [begin
          P0 = make_parser(Binary),
-         {ok, Val, P1} = parse(Type, P0),
-         true = (offset(P1) == size(Binary))
-     end || {Type, Val, Binary} <- V],
-    ok;
-test(stringmap) ->
+         {ok, Got, P1} = parse(Type, P0),
+         true = (Want =:= Got orelse Want =:= '_'),
+         true = (offset(P1) =:= size(Binary))
+     end || {Type, Want, Binary} <- V],
+
+    ok.
+
+test_stringmap() ->
     MakeSegment =
         fun(Strings) ->
                 iolist_to_binary(
