@@ -92,7 +92,7 @@ from_amf3_integer(Data) ->
 
 from_amf3_integer(<<1:1, Num:7, Data/binary>>, Result, N) when N < 3 ->
     from_amf3_integer(Data, (Result bsl 7) bor Num, N + 1);
-from_amf3_integer(<<0:0, Num:7, Data/binary>>, Result, N) when N < 3 ->
+from_amf3_integer(<<0:1, Num:7, Data/binary>>, Result, N) when N < 3 ->
     {(Result bsl 7) bor Num, Data};
 from_amf3_integer(<<Byte, Data/binary>>, Result, _N) ->
     Result1 = (Result bsl 8) bor Byte,
