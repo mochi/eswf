@@ -4,7 +4,7 @@
 -module(eswf_actions_utils).
 -author(matthew@mochimedia.com).
 
--export([stencilify/3]).
+-export([stencilify/3, encode_string/1]).
 
 %% @spec stencilify(Actions::binary(), Fun, Acc) -> {Chunks, NewAcc}
 %% where
@@ -65,43 +65,39 @@ pool_loop(Fun, Acc, Pool, N, Chunks) when N > 0 ->
     NewChunk =
         case Action of
             skip ->
-                {chunk, [String, 0]};
+                {chunk, encode_string(String)};
             {punch, Key} ->
                 {hole, Key}
         end,
     pool_loop(Fun, NewAcc, Rest, N - 1, [NewChunk | Chunks]).
 
-push_loop(_Fun, Acc, <<>>, Chunks) ->
-    {lists:reverse(Chunks), Acc};
 push_loop(Fun, Acc, <<0, Rest/binary>>, Chunks) ->
     {String, Rest2} = parse_string(Rest),
     {Action, NewAcc} = Fun(String, Acc),
     NewChunk =
         case Action of
             skip ->
-                {chunk, [String, 0]};
+                {chunk, encode_string(String)};
             {punch, Key} ->
                 {hole, Key}
         end,
     push_loop(Fun, NewAcc, Rest2, [NewChunk, {chunk, [0]} | Chunks]);
-push_loop(Fun, Acc, <<1, Float:32/float, Rest/binary>>, Chunks) ->
-    push_loop(Fun, Acc, Rest, [{chunk, <<1, Float:32/float>>} | Chunks]);
-push_loop(Fun, Acc, <<2, Rest/binary>>, Chunks) ->
-    push_loop(Fun, Acc, Rest, [{chunk, [2]} | Chunks]);
-push_loop(Fun, Acc, <<3, Rest/binary>>, Chunks) ->
-    push_loop(Fun, Acc, Rest, [{chunk, [3]} | Chunks]);
-push_loop(Fun, Acc, <<4, Reg, Rest/binary>>, Chunks) ->
-    push_loop(Fun, Acc, Rest, [{chunk, [4, Reg]} | Chunks]);
-push_loop(Fun, Acc, <<5, Bool, Rest/binary>>, Chunks) ->
-    push_loop(Fun, Acc, Rest, [{chunk, [5, Bool]} | Chunks]);
-push_loop(Fun, Acc, <<6, Double:64/float, Rest/binary>>, Chunks) ->
-    push_loop(Fun, Acc, Rest, [{chunk, <<6, Double:64/float>>} | Chunks]);
-push_loop(Fun, Acc, <<7, Int:32/little, Rest/binary>>, Chunks) ->
-    push_loop(Fun, Acc, Rest, [{chunk, <<7, Int:32/little>>} | Chunks]);
-push_loop(Fun, Acc, <<8, Ref, Rest/binary>>, Chunks) ->
-    push_loop(Fun, Acc, Rest, [{chunk, [8, Ref]} | Chunks]);
-push_loop(Fun, Acc, <<9, Ref:16/little, Rest/binary>>, Chunks) ->
-    push_loop(Fun, Acc, Rest, [{chunk, <<9, Ref:16/little>>} | Chunks]).
+push_loop(Fun, Acc, <<Type, Rest/binary>>, Chunks) when Type >= 1, Type =< 9 ->
+    Length = case Type of
+                 1 -> 4;
+                 2 -> 0;
+                 3 -> 0;
+                 4 -> 1;
+                 5 -> 1;
+                 6 -> 8;
+                 7 -> 4;
+                 8 -> 1;
+                 9 -> 2
+             end,
+    {Data, Rest2} = split_binary(Rest, Length),
+    push_loop(Fun, Acc, Rest2, [{chunk, [Type, Data]} | Chunks]);
+push_loop(_Fun, Acc, <<>>, Chunks) ->
+    {lists:reverse(Chunks), Acc}.
 
 
 parse_string(Binary) ->
@@ -114,3 +110,10 @@ parse_string(Binary, N) ->
         _ when N < size(Binary) ->
             parse_string(Binary, N + 1)
     end.
+
+%% @spec encode_string(String::iodata()) -> iodata()
+%%
+%% @doc Encode <code>String</code> as an ActionScript 2 string.
+encode_string(String) ->
+    %% XXX: Check String for nulls?
+    [String, 0].
