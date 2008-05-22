@@ -5,22 +5,20 @@
 
 %% @todo Consider API issues before stabilizing.  E.g., what values
 %% should the user's callback function be applied to?  Should it be
-%% able to completely replace tags?  Should the user be responsible
-%% for encoding values, or should the swfstencil?  Should the key
-%% spaces for different encodings be disjoint to help mitigate the
-%% risk of the user accidentally reusing keys (or misencoding)?  The
-%% disjoint key space could even be opaque to the user, so they need
-%% to build the tuples using function calls to help prevent them from
-%% incorrectly encoding things.
+%% able to completely replace tags?
+
+%% @todo Add proper edocs.
 
 -module(swfstencil).
 -export([stencilize/3, brush/3, fill/2]).
 -export([version/1, version/2]).
 
+-include_lib("eswf/include/tags.hrl").
+
 -record(stencil, {swfversion, zipchunks}).
 
 brush(as2, Key, String) ->
-    {{as2string, Key}, [String, 0]}; %% XXX
+    {{as2string, Key}, eswf_actions_utils:encode_string(String)};
 brush(as3, Key, String) ->
     {{as3string, Key}, eswf_abc:encode_string(String)};
 brush(export, Key, String) ->
@@ -43,8 +41,7 @@ version(Stencil, Version) when is_record(Stencil, stencil), Version >= Stencil#s
 
 stencilize(Binary, Fun, Acc) ->
     <<C, $W, $S, Version, Length:32/little, Body0/binary>> = Binary,
-    %% According to sswf.sf.net, the SWF file format does not allow
-    %% zlib compression before version 6.
+    %% File compression requires SWF 6 or later.
     if Version < 6 -> throw({error, badversion});
        true -> ok
     end,
@@ -62,43 +59,47 @@ stencilize(Binary, Fun, Acc) ->
     Stencil = #stencil{zipchunks=ZipChunks, swfversion=Version},
     {Stencil, NewAcc}.
 
-%% XXX: According to
-%% http://sswf.sourceforge.net/SWFalexref.html#swf_tag, the
-%% DefineBits{Lossless{,2},JPEG{,2,3}} and SoundStreamBlock tags (6,
-%% 19, 20, 21, 35, and 36) must always be encoded in the longer form.
 make_tag_header(Code, Length) when Length >= 63 ->
     <<((Code bsl 6) + 63):16/little, Length:32/little>>;
 make_tag_header(Code, Length) ->
     <<((Code bsl 6) + Length):16/little>>.
 
 
-fill(#stencil{swfversion=Version, zipchunks=SWFTemplate}, Brushes) ->
-    %% This part is still slightly gross.
-    Brush = fun (Key) ->
-                    {Key, V} = proplists:lookup(Key, Brushes),
-                    V
-            end,
-    AS3 = fun (Key) -> Brush({as3string, Key}) end,
-    AS2 = fun (Key) -> Brush({as2string, Key}) end,
-    Export = fun (Key) -> Brush({export, Key}) end,
-    Fun = fun({as3tagheader, BaseSize, Keys}) ->
-                  ExtraSize = lists:sum([iolist_size(AS3(Key)) || Key <- Keys]),
-                  make_tag_header(82, BaseSize + ExtraSize);
-             ({as3string, Key}) ->
-                  AS3(Key);
-             ({as2tagheader, Code, BaseSize, Keys}) ->
-                  ExtraSize = lists:sum([iolist_size(AS2(Key)) || Key <- Keys]),
+fill(#stencil{swfversion=Version, zipchunks=SWFTemplate}, Brushes0) ->
+    Brushes = gb_trees:from_orddict(orddict:from_list(Brushes0)),
+    Brush = fun(Key) -> gb_trees:get(Key, Brushes) end,
+    Fun = fun({simple, Key}) ->
+                  Brush(Key);
+             ({tagheader, Code, BaseSize, Keys}) ->
+                  ExtraSize = lists:sum([iolist_size(Brush(Key))
+                                         || Key <- Keys]),
                   make_tag_header(Code, BaseSize + ExtraSize);
              ({as2insnlen, BaseSize, Keys}) ->
-                  ExtraSize = lists:sum([iolist_size(proplists:get_value(Key, Brushes)) || Key <- Keys]),
+                  ExtraSize = lists:sum([iolist_size(Brush(Key))
+                                         || Key <- Keys]),
                   <<(BaseSize + ExtraSize):16/little>>;
+
+             %% Legacy brush formats
              ({as2string, Key}) ->
-                  AS2(Key);
-             ({exportheader, BaseSize, Keys}) ->
-                  ExtraSize = lists:sum([iolist_size(Brush(Key)) || Key <- Keys]),
-                  make_tag_header(52, BaseSize + ExtraSize);
+                  Brush({as2string, Key});
+             ({as3string, Key}) ->
+                  Brush({as3string, Key});
              ({export, Key}) ->
-                  Export(Key)
+                  Brush({export, Key});
+
+             %% Legacy tag header key formats
+             ({as2tagheader, Code, BaseSize, Keys}) ->
+                  ExtraSize = lists:sum([iolist_size(Brush({as2string, Key}))
+                                         || Key <- Keys]),
+                  make_tag_header(Code, BaseSize + ExtraSize);
+             ({as3tagheader, BaseSize, Keys}) ->
+                  ExtraSize = lists:sum([iolist_size(Brush({as3string, Key}))
+                                         || Key <- Keys]),
+                  make_tag_header(?DoABC, BaseSize + ExtraSize);
+             ({exportheader, BaseSize, Keys}) ->
+                  ExtraSize = lists:sum([iolist_size(Brush(Key))
+                                         || Key <- Keys]),
+                  make_tag_header(?ExportAssets, BaseSize + ExtraSize)
           end,
     {Length, Body} = zipchunk:fill(SWFTemplate, Fun),
     [<<"CWS", Version, (Length + 8):32/little>> | Body].
@@ -109,7 +110,13 @@ do_tags(Binary, Fun, Acc, UserAcc) ->
         eof ->
             {lists:flatten(lists:reverse(Acc)), UserAcc};
         {Code, Body, Rest} ->
-            {NewElt, NewUserAcc} = do_tag(Code, Body, Fun, UserAcc),
+            {NewElt0, NewUserAcc} = do_tag(Code, Body, Fun, UserAcc),
+            NewElt = case NewElt0 of
+                         skip ->
+                             {chunk, [make_tag_header(Code, size(Body)), Body]};
+                         _NewElt0 ->
+                             NewElt0
+                     end,
             do_tags(Rest, Fun, [NewElt | Acc], NewUserAcc)
     end.
 
@@ -128,64 +135,90 @@ read_tag(<<CodeAndLength:16/little, Rest/binary>>) ->
     {Body, R2} = split_binary(R1, Length),
     {Code, Body, R2}.
 
-do_tag(12, Body, Fun, UserAcc) ->
-    %% DoAction
+do_tag(Code, Body0, Fun, UserAcc)
+  when Code == ?DoAction; Code == ?DoInitAction ->
+    PrefixSize = case Code of
+                     ?DoAction -> 0;
+                     ?DoInitAction -> 2
+                 end,
+    {Prefix, Body} = split_binary(Body0, PrefixSize),
     Fun2 = fun(Key, {UA, Keys}) ->
                    case Fun({as2, Key}, UA) of
                        {{punch, Term}, NUA} ->
-                           {{punch, {as2string, Term}}, {NUA, [Term | Keys]}};
+                           NewKey = {as2string, Term},
+                           {{punch, NewKey}, {NUA, [NewKey | Keys]}};
                        {skip, NUA} ->
                            {skip, {NUA, Keys}}
                    end
            end,
-    {Template, {NewUserAcc, Keys}} = eswf_actions_utils:stencilify(Body, Fun2, {UserAcc, []}),
-    FixedSize = lists:sum([iolist_size(X) || {chunk, X} <- Template]),
-    ExtraTagSize = lists:sum([2 || {hole, {as2insnlen, _, _}} <- Template]),
-    NewElt = [{hole, {as2tagheader, 12, FixedSize + ExtraTagSize, Keys}} | Template],
+    {Template0, {NewUserAcc, Keys}}
+        = eswf_actions_utils:stencilify(Body, Fun2, {UserAcc, []}),
+    %% XXX: Stupid.
+    Template = lists:map(fun({hole, {as2string, Term}}) ->
+                                 {hole, {simple, {as2string, Term}}};
+                            (Else) ->
+                                 Else
+                         end, Template0),
+    NewElt = case Keys of
+                 [] ->
+                     skip;
+                 _Keys ->
+                     FixedSize = lists:sum([iolist_size(X)
+                                            || {chunk, X} <- Template]),
+                     ExtraTagSize = lists:sum([2 || {hole, {as2insnlen, _, _}}
+                                                        <- Template]),
+                     Size = PrefixSize + FixedSize + ExtraTagSize,
+                     [{hole, {tagheader, Code, Size, Keys}},
+                      {chunk, Prefix} | Template]
+             end,
      {NewElt, NewUserAcc};
-do_tag(59, <<SpriteID:16/little, Rest/binary>>, Fun, UserAcc) ->
-    %% DoInitAction
-    %% XXX: Lame
-    {NewElt, NewUserAcc} = do_tag(12, Rest, Fun, UserAcc),
-    [{hole, {as2tagheader, 12, BaseSize, Keys}} | RestElt] = NewElt,
-    NewElt2 = [{hole, {as2tagheader, 59, 2 + BaseSize, Keys}},
-               {chunk, <<SpriteID:16/little>>}
-               | RestElt],
-    {NewElt2, NewUserAcc};
-do_tag(56, <<Count:16/little, Rest/binary>>, Fun, UserAcc) ->
-    %% Export
+do_tag(?ExportAssets, <<Count:16/little, Rest/binary>>, Fun, UserAcc) ->
     Fun2 = fun(Key, UA) ->
                    case Fun({export, Key}, UA) of
                        {{punch, Term}, NUA} ->
-                           {{punch, {export, Term}}, NUA};
+                           {{punch, {simple, {export, Term}}}, NUA};
                        {skip, NUA} ->
                            {skip, NUA}
                    end
            end,
     {Template, NewUserAcc} = export_stencilify(Rest, Count, Fun2, UserAcc, []),
-    FixedSize = lists:sum([iolist_size(X) || {chunk, X} <- Template]),
-    Keys = [Key || {hole, Key} <- Template],
-    NewElt = [{hole, {exportheader, 2 + FixedSize, Keys}}, {chunk, <<Count:16/little>>} | Template],
+    Keys = [Key || {hole, {simple, Key}} <- Template],
+    NewElt = case Keys of
+                 [] ->
+                     skip;
+                 _Keys ->
+                     FixedSize = lists:sum([iolist_size(X)
+                                            || {chunk, X} <- Template]),
+                     [{hole, {tagheader, ?ExportAssets, 2 + FixedSize, Keys}},
+                      {chunk, <<Count:16/little>>} | Template]
+             end,
     {NewElt, NewUserAcc};
-do_tag(82, Body, Fun, UserAcc) ->
-    %% DoABCDefine
+do_tag(?DoABC, Body, Fun, UserAcc) ->
     HeaderSize = findnull(Body, 4) + 1,
     {Header, ABCSegment} = split_binary(Body, HeaderSize),
     Fun2 = fun(Key, {UA, Keys}) ->
                    case Fun({as3, Key}, UA) of
                        {{punch, Term}, NUA} ->
-                           {{punch, {as3string, Term}}, {NUA, [Term | Keys]}};
+                           NewKey = {as3string, Term},
+                           {{punch, {simple, NewKey}}, {NUA, [NewKey | Keys]}};
                        {skip, NUA} ->
                            {skip, {NUA, Keys}}
                    end
            end,
-    {Template, {NewUserAcc, Keys}} = eswf_abc:stencilify(ABCSegment, Fun2, {UserAcc, []}),
-    Size = lists:sum([iolist_size(X) || {chunk, X} <- Template]),
-    NewElt = [{hole, {as3tagheader, HeaderSize + Size, Keys}}, {chunk, Header} | Template],
+    {Template, {NewUserAcc, Keys}}
+        = eswf_abc:stencilify(ABCSegment, Fun2, {UserAcc, []}),
+    NewElt = case Keys of
+                 [] ->
+                     skip;
+                 _Keys ->
+                     Size = lists:sum([iolist_size(X)
+                                       || {chunk, X} <- Template]),
+                     [{hole, {tagheader, ?DoABC, HeaderSize + Size, Keys}},
+                      {chunk, Header} | Template]
+             end,
     {NewElt, NewUserAcc};
-do_tag(Code, Body, _Fun, UserAcc) when is_binary(Body) ->
-    NewElt = {chunk, [make_tag_header(Code, size(Body)), Body]},
-    {NewElt, UserAcc}.
+do_tag(_Code, Body, _Fun, UserAcc) when is_binary(Body) ->
+    {skip, UserAcc}.
 
 
 export_stencilify(<<>>, 0, _Fun, UserAcc, Acc) ->
@@ -205,9 +238,10 @@ export_stencilify(<<SpriteID:16/little, Rest/binary>>, N, Fun, UserAcc, Acc) whe
 
 
 findnull(Binary, N) ->
-    case Binary of
-        <<_Pre:N/binary, 0, _Rest/binary>> ->
-            N;
-        _Else ->
-            findnull(Binary, N + 1)
-    end.
+    <<_Pre:N/binary, Rest/binary>> = Binary,
+    findnull_1(Rest, N).
+
+findnull_1(<<0, _Rest/binary>>, N) ->
+    N;
+findnull_1(<<_Ch, Rest/binary>>, N) ->
+    findnull_1(Rest, N + 1).
