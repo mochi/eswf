@@ -7,7 +7,8 @@ ERL := erl
 ERLC := $(ERL)c
 
 INCLUDE_DIRS := ../include $(wildcard ../deps/*/include)
-ERLC_FLAGS := -W $(INCLUDE_DIRS:../%=-I ../%)
+EBIN_DIRS := $(dir $(PWD))/ebin $(wildcard ../deps/*/ebin)
+ERLC_FLAGS := -W $(INCLUDE_DIRS:../%=-I ../%) -pa $(EBIN_DIRS)
 
 ifndef no_debug_info
   ERLC_FLAGS += +debug_info
