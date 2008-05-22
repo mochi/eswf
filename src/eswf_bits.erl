@@ -13,10 +13,15 @@
 %% @doc Returns the number of bits required to represent each number of list.
 calc(unsigned, [])   -> 0;
 calc(unsigned, List) -> calc(unsigned, lists:max(List), 0);
-calc(signed, List)   -> 1 + calc(unsigned, [abs(X) || X <- List]);
+calc(signed, [])     -> 0;
+calc(signed, List)   -> lists:max([calc_signed(X) || X <- List]);
 calc(fixed, [])      -> 1;
 calc(fixed, List)    ->
     1 + calc(unsigned, trunc(65536 * lists:max([abs(X) || X <- List])), 0).
+
+calc_signed(0)                -> 0;
+calc_signed(Num) when Num > 0 -> 1 + calc(unsigned, Num, 0);
+calc_signed(Num) when Num < 0 -> 1 + calc(unsigned, bnot Num, 0).
 
 calc(unsigned, Num, 0) when is_float(Num) -> calc(unsigned, trunc(Num), 0);
 calc(unsigned, 0, Pos)                    -> Pos;
@@ -70,19 +75,20 @@ to_bytes(List, Acc) ->
 %% @doc Run the tests.
 
 test() ->
-    ok = test(to_bytes),
-    ok = test(enc),
-    ok = test(calc),
+    ok = test_to_bytes(),
+    ok = test_enc(),
+    ok = test_calc(),
     ok.
 
-test(to_bytes) ->
+test_to_bytes() ->
     [] = to_bytes([]),
     [128] = to_bytes([1]),
     [254] = to_bytes([1,1,1,1,1,1,1]),
     [255] = to_bytes([1,1,1,1,1,1,1,1]),
     [255, 1] = to_bytes([1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,1]),
-    ok;
-test(enc) ->
+    ok.
+
+test_enc() ->
     [1,1,1,1,1,1,1,0] = enc(unsigned, 8, 254),
     [0,1,1,1,1,1,1,1,0] = enc(unsigned, 9, 254),
     [1,1,1,1,1,1,1,0] = enc(signed, 8, -2),
@@ -90,11 +96,14 @@ test(enc) ->
     [0,0,1,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0] = enc(fixed, 22, 10.5),
     [0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0] = enc(fixed, 22, 30.0),
     [1,0,1,0,1,1,1,0,0,1] = enc(fixed, 10, -0.005),
-    ok;
-test(calc) ->
+    ok.
+
+test_calc() ->
+    0 = calc(unsigned, [0]),
     8 = calc(unsigned, [254]),
     4 = calc(unsigned, [12]),
-    2 = calc(signed, [-1]),
+    0 = calc(signed, [0]),
+    1 = calc(signed, [-1]),
     12 = calc(signed, [-1200]),
     21 = calc(fixed, [10.5]),
     22 = calc(fixed, [30]),
@@ -102,4 +111,3 @@ test(calc) ->
     22 = calc(fixed, [30, 10.5]),
     10 = calc(fixed, [-0.005]),
     ok.
-    
