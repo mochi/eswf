@@ -187,6 +187,9 @@ encstyles([{linestyle, Width, {rgb, R, G, B}} | Rest], Count, Acc, V)
   when V < 3 ->
     W = trunc(?TWIP(Width)),
     NextAcc = [<<W:16/little, R, G, B>> | Acc],
+    encstyles(Rest, 1 + Count, NextAcc, V);
+encstyles([{fillstyle, bitmap, Ref, Matrix} | Rest], Count, Acc, V) ->
+    NextAcc = [[<<16#41, Ref:16/little>>, enc(Matrix)] | Acc],
     encstyles(Rest, 1 + Count, NextAcc, V).
 
 encshape({shape_with_style, FillStyles, LineStyles, Shapes}, V) ->
