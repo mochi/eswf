@@ -6,7 +6,7 @@
 -module(eswf).
 
 -export([encswf/4, decswf/1, swf_reader/1]).
--export([swf_redir/2, swf_redir/4]).
+-export([swf_redir/2, swf_redir/4, compress/1]).
 
 %% @type iolist() = [char() | binary() | iolist()]
 %% @type iodata() = iolist() | binary()
@@ -41,7 +41,7 @@ swf_reader(Reader) when is_function(Reader) ->
     {Version, {Width, Height}, FrameRate, FrameCount, next_tag(R3)};
 swf_reader(Other) ->
     swf_reader(eswf_reader:reader(Other)).
-    
+
 next_tag(Reader) ->
     fun (close) ->
 	    {RLast, eof} = Reader(close),
@@ -67,8 +67,8 @@ next_tag(Reader) ->
 all_tags({_, eof}, Acc) ->
     lists:reverse(Acc);
 all_tags({NextTag, Tag}, Acc) ->
-    all_tags(NextTag(next), [Tag | Acc]).				
-				
+    all_tags(NextTag(next), [Tag | Acc]).
+
 %% @spec encswf(Version, {Width, Height}, Fps, Tags) -> iodata()
 %% @doc Return an uncompressed SWF file containing the tags in Tags.
 encswf(Version, {Width, Height}, Fps, Tags) ->
@@ -86,10 +86,20 @@ encswf(Version, {Width, Height}, Fps, Tags) ->
     Bytes = [Bounds, Header, EncTags, <<0:16/little>>],
     Size = 8 + iolist_size(Bytes),
     Signature = <<"FWS", Version, Size:32/little>>,
-    Binary = iolist_to_binary([Signature, Bytes]),
-    % file:write_file("/tmp/test.swf", Binary),
-    [Binary].
+    iolist_to_binary([Signature, Bytes]).
 
+%% @spec compress(SWF) -> iodata()
+%% @doc Return a compressed version of the SWF.
+compress(SWF) when is_list(SWF) ->
+    compress(iolist_to_binary(SWF));
+compress(SWF) when is_binary(SWF) ->
+    case SWF of
+        <<"CWS", _/binary>> ->
+            SWF;
+        <<"FWS", Version, Size:32/little, Rest/binary>> ->
+            Compressed = zlib:compress(Rest),
+            <<"CWS", Version, Size:32/little, Compressed/binary>>
+    end.
 
 %% @spec swf_redir(Url, {Width, Height}) -> iodata()
 %% @equiv swf_redir(Url, {Width, Height}, 12, 6)
@@ -101,3 +111,17 @@ swf_redir(Url, Dimensions) ->
 %%      at the center. The center of the loaded movie clip will be at (0, 0).
 swf_redir(Url, Dimensions, Fps, FlashVersion) ->
     eswf_redir:swf(Url, Dimensions, Fps, FlashVersion).
+
+%%
+%% Tests
+%%
+
+-include_lib("eunit/include/eunit.hrl").
+
+compress_test() ->
+    Tags = [{file_attributes, 1},
+	    {set_background_color, {rgb, 255, 255, 255}},
+	    show_frame],
+    SWF = encswf(6, {400, 400}, 31, Tags),
+    CSWF = compress(SWF),
+    ?assertEqual(decswf(SWF), decswf(CSWF)).

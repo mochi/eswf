@@ -185,7 +185,9 @@ parse_u32({Binary, Offset}) ->
                 {3, V0 + (V1 bsl 7) + (V2 bsl 14)};
             <<1:1, V0:7, 1:1, V1:7, 1:1, V2:7, 0:1, V3:7, _Rest/binary>> ->
                 {4, V0 + (V1 bsl 7) + (V2 bsl 14) + (V3 bsl 21)};
-            <<1:1, V0:7, 1:1, V1:7, 1:1, V2:7, 1:1, V3:7, 0:4, V4:4, _Rest/binary>> ->
+            <<1:1, V0:7, 1:1, V1:7, 1:1, V2:7, 1:1, V3:7, _Zero:4, V4:4, _Rest/binary>> ->
+                %% mxmlc encodes negative s30 numbers using _Zero = 0,
+                %% but SecureSWF uses _Zero = 15.
                 {5, V0 + (V1 bsl 7) + (V2 bsl 14) + (V3 bsl 21) + (V4 bsl 28)}
         end,
     {ok, Val, {Binary, Offset + Bytes}}.
@@ -235,7 +237,6 @@ subseg(Binary, Start, Stop) ->
     Size = Stop - Start,
     <<_Pre:Start/binary, Want:Size/binary, _Rest/binary>> = Binary,
     Want.
-    
 
 offset({_Binary, Offset}) ->
     Offset.
@@ -302,8 +303,12 @@ test_parse() ->
          %% they are how mxmlc encodes them.
          {s32, 64, <<64>>},
          {s32, 8192, <<128,64>>},
-         {s32, 1048576, <<128,128,64>>}
-         ],
+         {s32, 1048576, <<128,128,64>>},
+
+         %% SecureSWF encodes negative integers by sign extending all
+         %% of the bits.
+         {s32, -1, <<255,255,255,255,255>>}
+        ],
     [begin
          P0 = make_parser(Binary),
          {ok, Got, P1} = parse(Type, P0),

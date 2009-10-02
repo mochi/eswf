@@ -59,7 +59,10 @@ stencilize(Binary, Fun, Acc) ->
     Stencil = #stencil{zipchunks=ZipChunks, swfversion=Version},
     {Stencil, NewAcc}.
 
-make_tag_header(Code, Length) when Length >= 63 ->
+%% XXX: According to Adobe's "SWF File Format Specification Version 9"
+%% PDF, the guard here should be "Length >= 63", but in practice that
+%% breaks some SWFs.
+make_tag_header(Code, Length) when Length >= 1 ->
     <<((Code bsl 6) + 63):16/little, Length:32/little>>;
 make_tag_header(Code, Length) ->
     <<((Code bsl 6) + Length):16/little>>.
@@ -110,14 +113,24 @@ do_tags(Binary, Fun, Acc, UserAcc) ->
         eof ->
             {lists:flatten(lists:reverse(Acc)), UserAcc};
         {Code, Body, Rest} ->
-            {NewElt0, NewUserAcc} = do_tag(Code, Body, Fun, UserAcc),
-            NewElt = case NewElt0 of
-                         skip ->
-                             {chunk, [make_tag_header(Code, size(Body)), Body]};
-                         _NewElt0 ->
-                             NewElt0
+            try do_tag(Code, Body, Fun, UserAcc) of
+                {NewElt0, NewUserAcc} ->
+                    NewElt = case NewElt0 of
+                                 skip ->
+                                     {chunk, [make_tag_header(Code, size(Body)),
+                                              Body]};
+                                 _NewElt0 ->
+                                     NewElt0
                      end,
-            do_tags(Rest, Fun, [NewElt | Acc], NewUserAcc)
+                    do_tags(Rest, Fun, [NewElt | Acc], NewUserAcc)
+            catch
+                Type:What ->
+                    error_logger:error_report(["swfstencil:do_tag failed",
+                                               {caught, {Type, What}},
+                                               {code, Code}]),
+                    NewElt = {chunk, [make_tag_header(Code, size(Body)), Body]},
+                    do_tags(Rest, Fun, [NewElt | Acc], UserAcc)
+            end
     end.
 
 read_tag(<<>>) ->
@@ -193,8 +206,21 @@ do_tag(?ExportAssets, <<Count:16/little, Rest/binary>>, Fun, UserAcc) ->
                       {chunk, <<Count:16/little>>} | Template]
              end,
     {NewElt, NewUserAcc};
-do_tag(?DoABC, Body, Fun, UserAcc) ->
-    HeaderSize = findnull(Body, 4) + 1,
+do_tag(Code, Body, Fun, UserAcc)
+  when Code =:= ?DoABC; Code =:= 72 ->
+    HeaderSize =
+        case Code of
+            ?DoABC ->
+                findnull(Body, 4) + 1;
+            72 ->
+                %% Tag 72 isn't documented in SWF File Format v9, but
+                %% HaXe uses it.  According to [1], it's the same as
+                %% DoABC, but it doesn't have a header.  Needed for
+                %% #4698.
+                %%
+                %% [1] http://www.m2osw.com/en/swf_alexref.html#tag_doabc.
+                0
+        end,
     {Header, ABCSegment} = split_binary(Body, HeaderSize),
     Fun2 = fun(Key, {UA, Keys}) ->
                    case Fun({as3, Key}, UA) of
@@ -213,7 +239,7 @@ do_tag(?DoABC, Body, Fun, UserAcc) ->
                  _Keys ->
                      Size = lists:sum([iolist_size(X)
                                        || {chunk, X} <- Template]),
-                     [{hole, {tagheader, ?DoABC, HeaderSize + Size, Keys}},
+                     [{hole, {tagheader, Code, HeaderSize + Size, Keys}},
                       {chunk, Header} | Template]
              end,
     {NewElt, NewUserAcc};
