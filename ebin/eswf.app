@@ -5,4 +5,4 @@
  {registered, []},
  {env, []},
  {mod, {eswf_app, []}},
- {applications,[kernel,stdlib,sasl]}}.
+ {applications,[kernel,stdlib,sasl]}]}.
