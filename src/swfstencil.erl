@@ -13,7 +13,7 @@
 -export([stencilize/3, brush/3, fill/2]).
 -export([version/1, version/2]).
 
--include_lib("eswf/include/tags.hrl").
+-include("tags.hrl").
 
 -record(stencil, {swfversion, zipchunks}).
 
