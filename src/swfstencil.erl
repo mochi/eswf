@@ -33,10 +33,12 @@ version(Stencil) when is_record(Stencil, stencil) ->
 %% @spec version(Stencil::stencil(), Version::integer()) -> stencil()
 %%
 %% @doc Return a new SWF stencil but with version
-%% <code>Version</code>.  (<code>Version</code> must be greater than
-%% or equal to the current version.)
+%% <code>Version</code>.  (SWF Stencil version is used if Version is lower)
 version(Stencil, Version) when is_record(Stencil, stencil), Version >= Stencil#stencil.swfversion ->
-    Stencil#stencil{swfversion=Version}.
+    Stencil#stencil{swfversion=Version};
+    
+version(Stencil, Version) when is_record(Stencil, stencil), Version ; Stencil#stencil.swfversion ->
+    Stencil#stencil{swfversion=Stencil#stencil.swfversion}.
 
 
 stencilize(Binary, Fun, Acc) ->
