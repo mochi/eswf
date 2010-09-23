@@ -34,12 +34,8 @@ version(Stencil) when is_record(Stencil, stencil) ->
 %%
 %% @doc Return a new SWF stencil but with version
 %% <code>Version</code>.  (SWF Stencil version is used if Version is lower)
-version(Stencil, Version) when is_record(Stencil, stencil), Version >= Stencil#stencil.swfversion ->
-    Stencil#stencil{swfversion=Version};
-    
-version(Stencil, Version) when is_record(Stencil, stencil), Version < Stencil#stencil.swfversion ->
-    Stencil#stencil{swfversion=Stencil#stencil.swfversion}.
-
+version(Stencil, Version) when is_record(Stencil, stencil) ->
+    Stencil#stencil{swfversion=erl:max(Version, Stencil#stencil.swfversion)}.
 
 stencilize(Binary, Fun, Acc) ->
     <<C, $W, $S, Version, Length:32/little, Body0/binary>> = Binary,
