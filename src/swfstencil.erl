@@ -37,7 +37,7 @@ version(Stencil) when is_record(Stencil, stencil) ->
 version(Stencil, Version) when is_record(Stencil, stencil), Version >= Stencil#stencil.swfversion ->
     Stencil#stencil{swfversion=Version};
     
-version(Stencil, Version) when is_record(Stencil, stencil), Version ; Stencil#stencil.swfversion ->
+version(Stencil, Version) when is_record(Stencil, stencil), Version < Stencil#stencil.swfversion ->
     Stencil#stencil{swfversion=Stencil#stencil.swfversion}.
 
 
