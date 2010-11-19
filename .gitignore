@@ -1,4 +1,4 @@
 /ebin
 /doc
-TEST-*.xml
-.eunit
+/TEST-*.xml
+/.eunit
