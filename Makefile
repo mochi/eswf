@@ -1,20 +1,22 @@
-all: ebin/
-	(cd src;$(MAKE) all)
+
+REBAR=./rebar
+
+all:
+	@$(REBAR) get-deps compile
 
 edoc:
-	(cd src;$(MAKE) edoc)
+	@$(REBAR) doc
 
-test: ebin/
-	(cd src;$(MAKE) test)
+test:
+	@rm -rf .eunit
+	@mkdir -p .eunit
+	@$(REBAR) skip_deps=true eunit
 
 clean:
-	rm -rf ebin
+	@$(REBAR) clean
 
-clean_plt:
-	(cd src;$(MAKE) clean_plt)
+build_plt:
+	@$(REBAR) build_plt
 
 dialyzer:
-	(cd src;$(MAKE) dialyzer)
-
-ebin/:
-	@mkdir -p ebin
+	@$(REBAR) analyze
