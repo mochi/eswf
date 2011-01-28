@@ -115,7 +115,7 @@ swf_redir(Url, Dimensions, Fps, FlashVersion) ->
 %%
 %% Tests
 %%
-
+-ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 
 compress_test() ->
@@ -125,3 +125,4 @@ compress_test() ->
     SWF = encswf(6, {400, 400}, 31, Tags),
     CSWF = compress(SWF),
     ?assertEqual(decswf(SWF), decswf(CSWF)).
+-endif.
