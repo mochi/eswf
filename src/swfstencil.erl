@@ -183,34 +183,17 @@ do_tag(Code, Body0, Fun, UserAcc)
                       {chunk, Prefix} | Template]
              end,
      {NewElt, NewUserAcc};
-do_tag(?ExportAssets, <<Count:16/little, Rest/binary>>, Fun, UserAcc) ->
-    Fun2 = fun(Key, UA) ->
-                   case Fun({export, Key}, UA) of
-                       {{punch, Term}, NUA} ->
-                           {{punch, {simple, {export, Term}}}, NUA};
-                       {skip, NUA} ->
-                           {skip, NUA}
-                   end
-           end,
-    {Template, NewUserAcc} = export_stencilify(Rest, Count, Fun2, UserAcc, []),
-    Keys = [Key || {hole, {simple, Key}} <- Template],
-    NewElt = case Keys of
-                 [] ->
-                     skip;
-                 _Keys ->
-                     FixedSize = lists:sum([iolist_size(X)
-                                            || {chunk, X} <- Template]),
-                     [{hole, {tagheader, ?ExportAssets, 2 + FixedSize, Keys}},
-                      {chunk, <<Count:16/little>>} | Template]
-             end,
-    {NewElt, NewUserAcc};
+do_tag(?SymbolClass, Rest, Fun, UserAcc) ->
+    do_export_or_symbol_class(symbol_class, ?SymbolClass, Rest, Fun, UserAcc);
+do_tag(?ExportAssets, Rest, Fun, UserAcc) ->
+    do_export_or_symbol_class(export, ?SymbolClass, Rest, Fun, UserAcc);
 do_tag(Code, Body, Fun, UserAcc)
-  when Code =:= ?DoABC; Code =:= 72 ->
+  when Code =:= ?DoABC; Code =:= ?DoABCNoDefine ->
     HeaderSize =
         case Code of
             ?DoABC ->
                 findnull(Body, 4) + 1;
-            72 ->
+            ?DoABCNoDefine ->
                 %% Tag 72 isn't documented in SWF File Format v9, but
                 %% HaXe uses it.  According to [1], it's the same as
                 %% DoABC, but it doesn't have a header.  Needed for
@@ -244,6 +227,28 @@ do_tag(Code, Body, Fun, UserAcc)
 do_tag(_Code, Body, _Fun, UserAcc) when is_binary(Body) ->
     {skip, UserAcc}.
 
+
+do_export_or_symbol_class(CodeKey, Code, <<Count:16/little, Rest/binary>>, Fun, UserAcc) ->
+    Fun2 = fun(Key, UA) ->
+                   case Fun({CodeKey, Key}, UA) of
+                       {{punch, Term}, NUA} ->
+                           {{punch, {simple, {CodeKey, Term}}}, NUA};
+                       {skip, NUA} ->
+                           {skip, NUA}
+                   end
+           end,
+    {Template, NewUserAcc} = export_stencilify(Rest, Count, Fun2, UserAcc, []),
+    Keys = [Key || {hole, {simple, Key}} <- Template],
+    NewElt = case Keys of
+                 [] ->
+                     skip;
+                 _Keys ->
+                     FixedSize = lists:sum([iolist_size(X)
+                                            || {chunk, X} <- Template]),
+                     [{hole, {tagheader, Code, 2 + FixedSize, Keys}},
+                      {chunk, <<Count:16/little>>} | Template]
+             end,
+    {NewElt, NewUserAcc}.
 
 export_stencilify(<<>>, 0, _Fun, UserAcc, Acc) ->
     {lists:reverse(Acc), UserAcc};
