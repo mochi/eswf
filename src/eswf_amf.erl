@@ -27,16 +27,16 @@
 
 -record(amf, {objects=nil, objectcount=0}).
 
-get_ref({ref, RefNum}, S) ->
-    gb_trees:get(RefNum, S#amf.objects).
+%% get_ref({ref, RefNum}, S) ->
+%%     gb_trees:get(RefNum, S#amf.objects).
 
-alloc_refnum(S) ->
-    RefNum = S#amf.objectcount,
-    {RefNum, S#amf{objectcount=1 + RefNum}}.
+%% alloc_refnum(S) ->
+%%     RefNum = S#amf.objectcount,
+%%     {RefNum, S#amf{objectcount=1 + RefNum}}.
 
-make_ref(RefNum, Object, S) ->
-    Tree = gb_trees:insert(RefNum, Object, S#amf.objects),
-    {{ref, RefNum}, S#amf{objects=Tree}}.
+%% make_ref(RefNum, Object, S) ->
+%%     Tree = gb_trees:insert(RefNum, Object, S#amf.objects),
+%%     {{ref, RefNum}, S#amf{objects=Tree}}.
 
 from_amf(Data) ->
     <<Code, Rest/binary>> = iolist_to_binary(Data),
