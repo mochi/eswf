@@ -70,7 +70,12 @@ make_tag_header(Code, Length) ->
 
 fill(#stencil{swfversion=Version, zipchunks=SWFTemplate}, Brushes0) ->
     Brushes = gb_trees:from_orddict(orddict:from_list(Brushes0)),
-    Brush = fun(Key) -> gb_trees:get(Key, Brushes) end,
+    Brush = fun(Key) ->
+                    try gb_trees:get(Key, Brushes)
+                    catch error:function_clause ->
+                            throw({missing_stencil_key, Key})
+                    end
+            end,
     Fun = fun({simple, Key}) ->
                   Brush(Key);
              ({tagheader, Code, BaseSize, Keys}) ->
@@ -227,10 +232,10 @@ do_define_binary_data(Code, <<CharId:16/little, Reserved:32, Blob/binary>>, Fun,
     case Fun({CodeKey, Blob}, UserAcc) of
         {{punch, Term}, NewUserAcc} ->
             Key = {CodeKey, Term},
-            {[{hole, {tagheader, Code, 6 + iolist_size(Blob), Key}},
-              {chunk, <<CharId:16/little, Reserved:32>>},
-              {{punch, {simple, Key}}}],
-             NewUserAcc};
+            NewElt = [{hole, {tagheader, Code, 6, [Key]}},
+                      {chunk, <<CharId:16/little, Reserved:32>>},
+                      {hole, {simple, Key}}],
+            {NewElt, NewUserAcc};
         {skip, NewUserAcc} ->
             {skip, NewUserAcc}
     end.
