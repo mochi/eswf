@@ -21,6 +21,8 @@ brush(as2, Key, String) ->
     {{as2string, Key}, eswf_actions_utils:encode_string(String)};
 brush(as3, Key, String) ->
     {{as3string, Key}, eswf_abc:encode_string(String)};
+brush(binary, Key, String) ->
+    {{binary, Key}, String};
 brush(export, Key, String) ->
     {{export, Key}, [String, 0]}.
 
@@ -146,12 +148,24 @@ read_tag(<<CodeAndLength:16/little, Rest/binary>>) ->
     {Body, R2} = split_binary(R1, Length),
     {Code, Body, R2}.
 
-do_tag(Code, Body0, Fun, UserAcc)
-  when Code == ?DoAction; Code == ?DoInitAction ->
-    PrefixSize = case Code of
-                     ?DoAction -> 0;
-                     ?DoInitAction -> 2
-                 end,
+do_tag(?DoAction=Code, Body0, Fun, UserAcc) ->
+    do_action(0, Code, Body0, Fun, UserAcc);
+do_tag(?DoInitAction=Code, Body0, Fun, UserAcc) ->
+    do_action(2, Code, Body0, Fun, UserAcc);
+do_tag(?SymbolClass=Code, Rest, Fun, UserAcc) ->
+    do_export_or_symbol_class(symbol_class, Code, Rest, Fun, UserAcc);
+do_tag(?ExportAssets=Code, Rest, Fun, UserAcc) ->
+    do_export_or_symbol_class(export, Code, Rest, Fun, UserAcc);
+do_tag(?DoABC=Code, Body, Fun, UserAcc) ->
+    do_abc(findnull(Body, 4) + 1, Code, Body, Fun, UserAcc);
+do_tag(?DoABCNoDefine=Code, Body, Fun, UserAcc) ->
+    do_abc(0, Code, Body, Fun, UserAcc);
+do_tag(?DefineBinaryData=Code, Body, Fun, UserAcc) ->
+    do_define_binary_data(Code, Body, Fun, UserAcc);
+do_tag(_Code, Body, _Fun, UserAcc) when is_binary(Body) ->
+    {skip, UserAcc}.
+
+do_action(PrefixSize, Code, Body0, Fun, UserAcc) ->
     {Prefix, Body} = split_binary(Body0, PrefixSize),
     Fun2 = fun(Key, {UA, Keys}) ->
                    case Fun({as2, Key}, UA) of
@@ -182,26 +196,9 @@ do_tag(Code, Body0, Fun, UserAcc)
                      [{hole, {tagheader, Code, Size, Keys}},
                       {chunk, Prefix} | Template]
              end,
-     {NewElt, NewUserAcc};
-do_tag(?SymbolClass, Rest, Fun, UserAcc) ->
-    do_export_or_symbol_class(symbol_class, ?SymbolClass, Rest, Fun, UserAcc);
-do_tag(?ExportAssets, Rest, Fun, UserAcc) ->
-    do_export_or_symbol_class(export, ?SymbolClass, Rest, Fun, UserAcc);
-do_tag(Code, Body, Fun, UserAcc)
-  when Code =:= ?DoABC; Code =:= ?DoABCNoDefine ->
-    HeaderSize =
-        case Code of
-            ?DoABC ->
-                findnull(Body, 4) + 1;
-            ?DoABCNoDefine ->
-                %% Tag 72 isn't documented in SWF File Format v9, but
-                %% HaXe uses it.  According to [1], it's the same as
-                %% DoABC, but it doesn't have a header.  Needed for
-                %% #4698.
-                %%
-                %% [1] http://www.m2osw.com/en/swf_alexref.html#tag_doabc.
-                0
-        end,
+     {NewElt, NewUserAcc}.
+
+do_abc(HeaderSize, Code, Body, Fun, UserAcc) ->
     {Header, ABCSegment} = split_binary(Body, HeaderSize),
     Fun2 = fun(Key, {UA, Keys}) ->
                    case Fun({as3, Key}, UA) of
@@ -223,10 +220,20 @@ do_tag(Code, Body, Fun, UserAcc)
                      [{hole, {tagheader, Code, HeaderSize + Size, Keys}},
                       {chunk, Header} | Template]
              end,
-    {NewElt, NewUserAcc};
-do_tag(_Code, Body, _Fun, UserAcc) when is_binary(Body) ->
-    {skip, UserAcc}.
+{NewElt, NewUserAcc}.
 
+do_define_binary_data(Code, <<CharId:16/little, Reserved:32, Blob/binary>>, Fun, UserAcc) ->
+    CodeKey = binary,
+    case Fun({CodeKey, Blob}, UserAcc) of
+        {{punch, Term}, NewUserAcc} ->
+            Key = {CodeKey, Term},
+            {[{hole, {tagheader, Code, 6 + iolist_size(Blob), Key}},
+              {chunk, <<CharId:16/little, Reserved:32>>},
+              {{punch, {simple, Key}}}],
+             NewUserAcc};
+        {skip, NewUserAcc} ->
+            {skip, NewUserAcc}
+    end.
 
 do_export_or_symbol_class(CodeKey, Code, <<Count:16/little, Rest/binary>>, Fun, UserAcc) ->
     Fun2 = fun(Key, UA) ->
