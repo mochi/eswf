@@ -158,9 +158,27 @@ do_tag(?DoAction=Code, Body0, Fun, UserAcc) ->
 do_tag(?DoInitAction=Code, Body0, Fun, UserAcc) ->
     do_action(2, Code, Body0, Fun, UserAcc);
 do_tag(?SymbolClass=Code, Rest, Fun, UserAcc) ->
-    do_export_or_symbol_class(symbol_class, Code, Rest, Fun, UserAcc);
+    CodeKey = symbol_class,
+    Fun2 = fun(Key, UA) ->
+                   case Fun({CodeKey, Key}, UA) of
+                       {{punch, Term}, NUA} ->
+                           {{punch, {simple, {CodeKey, Term}}}, NUA};
+                       {skip, NUA} ->
+                           {skip, NUA}
+                   end
+           end,
+    do_export_or_symbol_class(Code, Rest, Fun2, UserAcc);
 do_tag(?ExportAssets=Code, Rest, Fun, UserAcc) ->
-    do_export_or_symbol_class(export, Code, Rest, Fun, UserAcc);
+    CodeKey = export,
+    Fun2 = fun({_CharID, Key}, UA) ->
+                   case Fun({CodeKey, Key}, UA) of
+                       {{punch, Term}, NUA} ->
+                           {{punch, {simple, {CodeKey, Term}}}, NUA};
+                       {skip, NUA} ->
+                           {skip, NUA}
+                   end
+           end,
+    do_export_or_symbol_class(Code, Rest, Fun2, UserAcc);
 do_tag(?DoABC=Code, Body, Fun, UserAcc) ->
     do_abc(findnull(Body, 4) + 1, Code, Body, Fun, UserAcc);
 do_tag(?DoABCNoDefine=Code, Body, Fun, UserAcc) ->
@@ -229,7 +247,7 @@ do_abc(HeaderSize, Code, Body, Fun, UserAcc) ->
 
 do_define_binary_data(Code, <<CharId:16/little, Reserved:32, Blob/binary>>, Fun, UserAcc) ->
     CodeKey = binary,
-    case Fun({CodeKey, Blob}, UserAcc) of
+    case Fun({CodeKey, {CharId, Blob}}, UserAcc) of
         {{punch, Term}, NewUserAcc} ->
             Key = {CodeKey, Term},
             NewElt = [{hole, {tagheader, Code, 6, [Key]}},
@@ -240,15 +258,7 @@ do_define_binary_data(Code, <<CharId:16/little, Reserved:32, Blob/binary>>, Fun,
             {skip, NewUserAcc}
     end.
 
-do_export_or_symbol_class(CodeKey, Code, <<Count:16/little, Rest/binary>>, Fun, UserAcc) ->
-    Fun2 = fun(Key, UA) ->
-                   case Fun({CodeKey, Key}, UA) of
-                       {{punch, Term}, NUA} ->
-                           {{punch, {simple, {CodeKey, Term}}}, NUA};
-                       {skip, NUA} ->
-                           {skip, NUA}
-                   end
-           end,
+do_export_or_symbol_class(Code, <<Count:16/little, Rest/binary>>, Fun2, UserAcc) ->
     {Template, NewUserAcc} = export_stencilify(Rest, Count, Fun2, UserAcc, []),
     Keys = [Key || {hole, {simple, Key}} <- Template],
     NewElt = case Keys of
@@ -266,7 +276,7 @@ export_stencilify(<<>>, 0, _Fun, UserAcc, Acc) ->
     {lists:reverse(Acc), UserAcc};
 export_stencilify(<<SpriteID:16/little, Rest/binary>>, N, Fun, UserAcc, Acc) when N > 0 ->
     {String, <<0, Rest2/binary>>} = split_binary(Rest, findnull(Rest, 0)),
-    {Action, NewUserAcc} = Fun(String, UserAcc),
+    {Action, NewUserAcc} = Fun({SpriteID, String}, UserAcc),
     Chunk =
         case Action of
             skip ->
