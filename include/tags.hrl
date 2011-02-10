@@ -50,6 +50,7 @@
 -define(FileAttributes, 69).
 -define(PlaceObject3, 70).
 -define(ImportAssets2, 71).
+-define(DoABCNoDefine, 72).
 -define(DefineFontAlignZones, 73).
 -define(CSMTextSettings, 74).
 -define(DefineFont3, 75).

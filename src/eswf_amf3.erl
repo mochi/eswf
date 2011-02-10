@@ -1,196 +1,116 @@
+%% @copyright 2008 Mochi Media, Inc.
+%% @author Matthew Dempsky <matthew@mochimedia.com>
+%%
+%% @doc Simple AMF3 encoder. Does not provide a surjective mapping to
+%% valid AMF3 encodings. Does not try to share object references.
+%%
+%% @reference See the <a
+%% href="http://download.macromedia.com/pub/labs/amf/amf3_spec_121207.pdf">AMF3
+%% specification</a> for details on the AMF3 format.
+
 -module(eswf_amf3).
--export([from_amf3/1, from_amf3/3]).
--export([from_amf3_integer/1, from_amf3_string/2,
-	 from_amf3_array/3, from_amf3_object/3]).
--export([get/2]).
+-author("Matthew Dempsky <matthew@mochimedia.com>").
 
--define(UNDEFINED, 0).
--define(NULL, 1).
--define(FALSE, 2).
--define(TRUE, 3).
--define(INTEGER, 4).
--define(NUMBER, 5).
--define(STRING, 6).
--define(XML, 7).
--define(DATE, 8).
--define(ARRAY, 9).
--define(OBJECT, 10).
--define(XML_STRING, 11).
+-export([encode/1]).
 
--define(OBJECT_OBJ_INLINE, 1).
--define(OBJECT_CLASS_INLINE, 2).
--define(OBJECT_PROP_DEF, 4).
--define(OBJECT_PROP_SERIAL, 8).
+-record(state, {strings = gb_trees:empty()}).
 
--define(INTEGER_MAX, 268435455).
--define(INTEGER_MIN, -268435456).
+%% @spec encode(Object::amfterm()) -> iodata()
+%% where amfterm() = undefined | null | false | true
+%%                   | int() | float() | amfstring()
+%%                   | [amfterm()]
+%%                   | {struct, [{amfstring(), amfterm()}]}
+%%                   | {bytes, binary()}
+%%       amfstring() = binary() | {string, iodata()}
+%%
+%% @doc Encode using AMF3.
+encode(Object) ->
+    {Result, _} = encode(Object, #state{}),
+    Result.
 
--record(amf3, {strings=nil, objects=nil, stringcount=0, objectcount=0}).
+encode(undefined, State) ->
+    {0, State};
+encode(null, State) ->
+    {1, State};
+encode(false, State) ->
+    {2, State};
+encode(true, State) ->
+    {3, State};
+encode(N, State) when is_integer(N), N >= 0, N < (1 bsl 29) ->
+    {[4, encode_u29(N)], State};
+encode(N, State) when is_integer(N), N < 0, N >= -(1 bsl 28) ->
+    {[4, encode_u29(N + (1 bsl 29))], State};
+encode(N, State) when is_integer(N) ->
+    encode(float(N), State);
+encode(Double, State) when is_float(Double) ->
+    {<<5, Double/float>>, State};
+encode(String, State) when is_binary(String) ->
+    {Bytes, NewState} = encode_string(String, State),
+    {[6, Bytes], NewState};
+encode({string, String}, State) ->
+    {Bytes, NewState} = encode_string(String, State),
+    {[6, Bytes], NewState};
+encode(Array, State) when is_list(Array) ->
+    Header = [9, encode_u29(2 * length(Array) + 1), 1],
+    {Body, NewState} = lists:mapfoldl(fun encode/2, State, Array),
+    {[Header, Body], NewState};
+encode({struct, Fields0}, State) when is_list(Fields0) ->
+    Fields = lists:sort(Fields0),
+    Fun = fun({Key, Value}, State0) ->
+                  case encode_string(Key, State0) of
+                      {1, _} ->
+                          %% The AMF3 format can't handle
+                          %% empty strings as keys in sparse
+                          %% arrays.
+                          {[], State0};
+                      {KeyBytes, State1} ->
+                          {ValueBytes, State2} = encode(Value, State1),
+                          {[KeyBytes, ValueBytes], State2}
+                  end
+          end,
+    {Body, NewState} = lists:mapfoldl(Fun, State, Fields),
+    {[9, 1, Body, 1], NewState};
+encode({bytes, ByteArray}, State) when is_binary(ByteArray) ->
+    {[12, encode_u29(2 * size(ByteArray) + 1), ByteArray], State}.
 
-from_amf3(Data) ->
-    <<Code, Rest/binary>> = iolist_to_binary(Data),
-    {Value, Rest, State} = from_amf3(Code, Rest, #amf3{}),
-    {{amf3, Value, State}, Rest}.
-       
-from_amf3(Code, Data, S) when Code == ?UNDEFINED ->
-    {undefined, Data, S};
-from_amf3(Code, Data, S) when Code == ?NULL ->
-    {null, Data, S};
-from_amf3(Code, Data, S) when Code == ?FALSE ->
-    {false, Data, S};
-from_amf3(Code, Data, S) when Code == ?TRUE ->
-    {true, Data, S};
-from_amf3(Code, Data, S) when Code == ?INTEGER ->
-    {Num, Rest} = from_amf3_integer(Data),
-    {Num, Rest, S};
-from_amf3(Code, Data, S) when Code == ?NUMBER ->
-    <<Float:64/float, Rest/binary>> = Data,
-    {Float, Rest, S};
-from_amf3(Code, Data, S) when Code == ?STRING ->
-    from_amf3_string(Data, S);
-from_amf3(Code, Data, S) when Code == ?XML ->
-    {String, Rest, S1} = from_amf3_string(Data, S),
-    {{xml, String}, Rest, S1};
-from_amf3(Code, Data, S) when Code == ?DATE ->
-    {Type, Rest1} = from_amf3_integer(Data),
-    case Type band 1 of
-	0 ->
-	    <<Float:64/float, Rest2/binary>> = Rest1,
-	    {Ref, S1} = add_object({date, Float}, S),
-	    {Ref, Rest2, S1};
-	1 ->
-	    {{ref, Type bsr 1}, Rest1, S}
+encode_string(<<>>, State) ->
+    {1, State};
+encode_string(String, State) when is_binary(String) ->
+    %% @todo Ensure <code>String</code> is valid UTF8?
+    case find(String, State#state.strings) of
+        {ok, N} when is_integer(N) ->
+            {encode_u29(2 * N), State};
+        none ->
+            Encoding = [encode_u29(2 * size(String) + 1), String],
+            NewState = State#state{strings = add(String, State#state.strings)},
+            {Encoding, NewState}
     end;
-from_amf3(Code, Data, S) when Code == ?ARRAY ->
-    {Type, Rest1} = from_amf3_integer(Data),
-    Length = Type bsr 1,
-    case Type band 1 of
-	0 ->
-	    from_amf3_array(Length, Rest1, S);
-	1 ->
-	    {{ref, Length}, Rest1, S}
-    end;
-from_amf3(Code, Data, S) when Code == ?OBJECT ->
-    {Type, Rest1} = from_amf3_integer(Data),
-    TypeInfo = Type bsr 1,
-    case Type band 1 of
-	0 ->
-	    from_amf3_object(TypeInfo, Rest1, S);
-	1 ->
-	    {{ref, TypeInfo}, Rest1, S}
-    end;
-from_amf3(Code, Data, S) when Code == ?XML_STRING ->
-    {Type, Rest1} = from_amf3_integer(Data),
-    0 = Type band 1,
-    Length = Type bsr 1,
-    <<String:Length/binary, Rest2/binary>> = Rest1,
-    {{xml, String}, Rest2, S}.
+encode_string(String, State) when is_atom(String) ->
+    encode_string(atom_to_binary(String, utf8), State);
+encode_string(String, State) ->
+    encode_string(iolist_to_binary(String), State).
 
-
-from_amf3_integer(Data) ->
-    from_amf3_integer(Data, 0, 0).
-
-from_amf3_integer(<<1:1, Num:7, Data/binary>>, Result, N) when N < 3 ->
-    from_amf3_integer(Data, (Result bsl 7) bor Num, N + 1);
-from_amf3_integer(<<0:1, Num:7, Data/binary>>, Result, N) when N < 3 ->
-    {(Result bsl 7) bor Num, Data};
-from_amf3_integer(<<Byte, Data/binary>>, Result, _N) ->
-    Result1 = (Result bsl 8) bor Byte,
-    Result3 = case Result1 band 16#10000000 of
-		  16#10000000 ->
-		      Extended = Result1 bor 16#e0000000,
-		      <<Result2:32/signed>> = <<Extended:32>>,
-		      Result2;
-		  0 ->
-		      Result1
-	      end,
-    {Result3, Data}.
-
-from_amf3_string(Data, S) ->
-    {Type, Rest} = from_amf3_integer(Data),
-    Length = Type bsr 1,
-    case Type band 1 of
-	0 ->
-	    <<String:Length/binary, Rest1/binary>> = Rest,
-	    S1 = add_string(String, S),
-	    {String, Rest1, S1};
-	1 ->
-	    {get_string(Length, S), Rest, S}
+encode_u29(N) when is_integer(N), N >= 0, N < (1 bsl 29) ->
+    %% Ugh, the 4-byte case has to make this a pain...
+    if
+        N < (1 bsl 7) ->
+            N;
+        N < (1 bsl 15) ->
+            <<1:1, (N bsr 7):7, 0:1, N:7>>;
+        N < (1 bsl 23) ->
+            <<1:1, (N bsr 14):7, 1:1, (N bsr 7):7, 0:1, N:7>>;
+        true ->
+            <<1:1, (N bsr 22):7, 1:1, (N bsr 15):7, 1:1, (N bsr 8):7, N:8>>
     end.
 
 
-from_amf3_array(Length, <<1, Data/binary>>, S) ->
-    {RefNum, S1} = new_object(S),
-    {Array, Rest, S2} = from_amf3_array(Length, Data, S1, [], Length),
-    {Ref, S3} = finish_object(RefNum, Array, S2),
-    {Ref, Rest, S3}.
+find(Key, Strings) ->
+    case gb_trees:lookup(Key, Strings) of
+        {value, Val} ->
+            Val;
+        none ->
+            none
+    end.
 
-from_amf3_array(0, Data, S, Acc, OrigLength) ->
-    {{array, OrigLength, lists:reverse(Acc)}, Data, S};
-from_amf3_array(Length, Data, S, Acc, OrigLength) ->
-    <<Code, Data1/binary>> = Data,
-    {Item, Rest, S1} = from_amf3(Code, Data1, S),
-    from_amf3_array(Length - 1, Rest, S1, [Item | Acc], OrigLength).
-
-from_amf3_object(TypeInfo, Data, S) ->
-    {RefNum, S1} = new_object(S),
-    {Class, Rest1, S2} = from_amf3_object_class(TypeInfo, Data, S1),
-    ObjType = (TypeInfo bsr 1) band 3,
-    {Object, Rest2, S3} = from_amf3_object_object(ObjType, Class, Rest1, S2),
-    {Ref, S4} = finish_object(RefNum, Object, S3),
-    {Ref, Rest2, S4}.
-
-from_amf3_object_class(TypeInfo, Data, S) when (TypeInfo band 1) == 1 ->
-    todo,
-    {TypeInfo, Data, S}.
-
-from_amf3_object_object(ObjType, Class, Data, S) ->
-    todo,
-    {{Class, ObjType}, Data, S}.
-
-add_object(Object, S) ->
-    OldTree = case S#amf3.objects of
-		  nil ->
-		      gb_trees:from_orddict([]);
-		  _Tree ->
-		      _Tree
-	      end,
-    RefNum = S#amf3.objectcount,
-    Tree = gb_trees:insert(RefNum, Object, OldTree),
-    {{ref, RefNum}, S#amf3{objects=Tree, objectcount=1 + RefNum}}.
-
-new_object(S) ->
-    RefNum = S#amf3.objectcount,
-    {RefNum, S#amf3{objectcount=1 + RefNum}}.
-
-finish_object(RefNum, Object, S) ->
-    OldTree = case S#amf3.objects of
-		  nil ->
-		      gb_trees:from_orddict([]);
-		  _Tree ->
-		      _Tree
-	      end,
-    Tree = gb_trees:insert(RefNum, Object, OldTree),
-    {{ref, RefNum}, S#amf3{objects=Tree}}.
-
-add_string(String, S) ->
-    OldTree = case S#amf3.strings of
-		  nil ->
-		      gb_trees:from_orddict([]);
-		  _Tree ->
-		      _Tree
-	      end,
-    RefNum = S#amf3.stringcount,
-    Tree = gb_trees:insert(RefNum, String, OldTree),
-    {String, S#amf3{strings=Tree, stringcount=1 + RefNum}}.
-
-get_object(RefNum, S) ->
-    gb_trees:get(RefNum, S#amf3.objects).
-
-get_string(RefNum, S) ->
-    gb_trees:get(RefNum, S#amf3.strings).
-
-get({ref, RefNum}, S) ->
-    get_object(RefNum, S);
-get(Object, _) ->
-    Object.
+add(Key, Strings) ->
+    gb_trees:insert(Key, gb_trees:size(Strings), Strings).
