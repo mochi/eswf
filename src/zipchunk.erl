@@ -14,7 +14,8 @@
 %% @todo Provide API for streaming output (e.g., HTTP chunking).
 
 -module(zipchunk).
--author(matthew@mochimedia.com).
+-author('matthew@mochimedia.com').
+
 
 -export([optimize/1, fill/2]).
 -export([sumnull/1, sumchunk/3, sumjoin/4]).

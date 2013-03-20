@@ -2,7 +2,7 @@
 %% @copyright 2007 Mochi Media, Inc.
 
 -module(eswf_actions_utils).
--author(matthew@mochimedia.com).
+-author('matthew@mochimedia.com').
 
 -export([stencilify/3, encode_string/1]).
 

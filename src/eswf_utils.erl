@@ -5,7 +5,8 @@
 %% utility functions used by other eswf functions.
 
 -module(eswf_utils).
--author(matthew@mochimedia.com).
+-author('matthew@mochimedia.com').
+
 
 -export([edit/2]).
 

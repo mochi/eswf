@@ -11,7 +11,7 @@
 
 
 -module(eswf_abc).
--author(matthew@mochimedia.com).
+-author('matthew@mochimedia.com').
 
 -define(ABCMAJOR, 46).
 -define(ABCMINOR, 16).
